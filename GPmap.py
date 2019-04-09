@@ -39,7 +39,19 @@ class trajectories:
         plt.show();
 
 trajs = trajectories()
- 
+
+def check_if_valid_trajectory(traj, minimumtraveldistance = 1):
+    sum = 0
+    length = len(traj.xs)
+    
+    for i in range(length):
+        for j in range(i+1, length):
+            sum += abs(traj.xs[j]) - abs(traj.xs[i])
+            sum += abs(traj.ys[j]) - abs(traj.ys[i])
+    if(sum < minimumtraveldistance):
+        return False;
+    return True;
+    
         
 def readcsvfile(numoftrajstoread=0):
     global trajs;
@@ -50,11 +62,11 @@ def readcsvfile(numoftrajstoread=0):
         
         isnewtrajectory = True
         id = 0
-        #newtrajectory = trajectory();
         for row in data:
             if(row[0] == '###'):
-                trajs.add_trajectory(id,newtrajectory)
-                trajnr = trajnr + 1;
+                if check_if_valid_trajectory(newtrajectory, 1000):
+                    trajs.add_trajectory(id,newtrajectory)
+                    trajnr = trajnr + 1;
                 if numoftrajstoread is not 0 and trajnr >= numoftrajstoread:
                     break;
                 newtrajectory = trajectory()
@@ -70,12 +82,9 @@ def readcsvfile(numoftrajstoread=0):
                     isnewtrajectory = False                    
                     
                 
-            #if linenr >= 10:
-             #   break;
             
                 
-        #trajectories = {id, trajectory}
 
 readcsvfile(500)
-#print(len(trajs.pathdict))
+
 trajs.plot()
