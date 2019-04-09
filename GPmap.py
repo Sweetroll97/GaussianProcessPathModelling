@@ -29,21 +29,24 @@ class trajectories:
     def add_trajectory(self,id, trajectory):
         self.pathdict[id] = trajectory
     def plot(self):
-
+        
+        plt.axis([-50000,50000.0,-50000.0,50000.0]) # xmin, xmax, ymin, ymax
+        plt.gca().set_autoscale_on(False)
+        
         for id in self.pathdict:
-            plt.scatter(self.pathdict[id].xs, self.pathdict[id].ys)
+            plt.plot(self.pathdict[id].xs, self.pathdict[id].ys)
             
         plt.show();
 
 trajs = trajectories()
  
         
-def readcsvfile():
+def readcsvfile(numoftrajstoread=0):
     global trajs;
     
     with open('testfile.csv') as data:
         data = csv.reader(data, delimiter=',')
-        linenr = 0
+        trajnr = 0
         
         isnewtrajectory = True
         id = 0
@@ -51,12 +54,15 @@ def readcsvfile():
         for row in data:
             if(row[0] == '###'):
                 trajs.add_trajectory(id,newtrajectory)
+                trajnr = trajnr + 1;
+                if numoftrajstoread is not 0 and trajnr >= numoftrajstoread:
+                    break;
                 newtrajectory = trajectory()
                 isnewtrajectory = True
                 
             else:
                 if not isnewtrajectory:
-                    newtrajectory.add_point(row[0], row[2],row[3]) 
+                    newtrajectory.add_point(row[0], int(row[2]),int(row[3])) 
                     
                 else:
                     id = row[1]
@@ -64,13 +70,12 @@ def readcsvfile():
                     isnewtrajectory = False                    
                     
                 
-            linenr = linenr + 1
-            if linenr >= 10:
-                break;
+            #if linenr >= 10:
+             #   break;
             
                 
         #trajectories = {id, trajectory}
 
-readcsvfile()
+readcsvfile(500)
 #print(len(trajs.pathdict))
 trajs.plot()
