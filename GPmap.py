@@ -3,13 +3,12 @@ import statistics as ss
 import pandas as ps
 import csv
 import matplotlib.pyplot as plt
- 
 
 class trajectory:
     def __init__(self):
         self.xs = np.array([], (float))
         self.ys = np.array([], (float))
-        self.timestamp = np.array([], (float))       
+        self.timestamp = np.array([], (float))
         
     def add_point(self,time,x,y):
         self.xs = np.append(self.xs,x)
@@ -32,41 +31,63 @@ class trajectories:
     def add_trajectory(self,id, trajectory):
         self.pathdict[id] = trajectory
         
+    def get_traveled_dist(self,x1,y1,x2,y2):
+        return ((x1-x2)**2+(y1-y2)**2)**.5
+        
+    def get_function_length(self,array_x1,array_y1):
+        total_length = 0.0
+        for i in range(len(array_x1)-2):
+            total_length+= self.get_traveled_dist(array_x1[i],array_y1[i],array_x1[i+1],array_y1[i])
+        return total_length
+        
+    
+    def get_next_point(self, last_point, curr_point, next_point, movement):
+        return curr_point+((next_point-last_point)/np.linalg.norm((next_point-last_point)))*movement
+        
+        
     def interpol_points(self):
-        max_length = 500
+        number_of_observations = 307-1
         #for id in self.pathdict:
          #   if len(self.pathdict[id].xs) > max_length:
           #      max_length = len(self.pathdict[id].xs)
         for id in self.pathdict:
-            if len(self.pathdict[id].xs) > 0:
-                #Set inital values
-                curr_value = self.pathdict[id].xs[0]
-                y_value = self.pathdict[id].ys[0]
+            #Set initual values
+            curr_interpol_point = np.matrix(( self.pathdict[id].xs[0],self.pathdict[id].ys[0]))
+            
+            #Calculate total length of teh function
+            funcion_length = self.get_function_length(self.pathdict[id].xs, self.pathdict[id].ys)
+            
+            #Calculate how much to move at each time step
+            Wi= funcion_length/number_of_observations                                    
+            if(Wi == 0):
+                continue
+            #Creation of temporary lists
+            interp_xs = np.array([], (float))
+            interp_ys = np.array([], (float))
+            
+            curr_size = len(self.pathdict[id].xs)            
+            i = 0
+            while i*Wi <= funcion_length:
+                #LOCAL FUNCTION          
+                last_point = next_point = np.matrix(( [self.pathdict[id].xs[i],self.pathdict[id].ys[i]]))
+                if i != curr_size-1:
+                    next_point = np.matrix(([self.pathdict[id].xs[i+1],self.pathdict[id].ys[i+1]]))
+                    point_distance = np.linalg.norm((next_point-last_point))
+                    curr_distance = 0.0
+                 
+                    while curr_distance <= point_distance:
+                        
+                        #Calculate new point and direction
+                        interp_xs = np.append(interp_xs,curr_interpol_point.item(0))
+                        interp_ys = np.append(interp_ys,curr_interpol_point.item(1))
+                        temp_point = curr_interpol_point
+                        curr_interpol_point = self.get_next_point(temp_point, curr_interpol_point, next_point, Wi)  
+                        curr_distance += np.linalg.norm((curr_interpol_point-temp_point))
+                        print(curr_interpol_point)
+                        
+                i+=1
+                print(last_point)
                 
-                #Get endpoint
-                end_x = self.pathdict[id].xs[len(self.pathdict[id].xs)-1]
-                
-                #Get max and min values for x
-                local_max = max(self.pathdict[id].xs)
-                local_min = min(self.pathdict[id].xs)
-                
-                #Calculate movement
-                movement = (float)(end_x-curr_value)/(max_length-1)
-                
-                if(movement == 0):
-                    continue
-                interp_xs = np.array([], (float))
-                interp_ys = np.array([], (float))   
-                #print("Max: "+str(local_max)+ "Curr_value:" + str(curr_value))
-                while curr_value <= local_max and curr_value >= local_min:
-                    interp_ys=np.append(interp_ys,y_value)
-                    interp_xs=np.append(interp_xs,curr_value)
-                    #Update next step
-                    curr_value = curr_value + movement
-                    y_value = np.interp(curr_value,self.pathdict[id].xs,self.pathdict[id].ys)
-                #Set new interpolated trajectory 
-                self.pathdict[id].xs = interp_xs
-                self.pathdict[id].ys = interp_ys
                 
         
     def plot(self):
@@ -119,6 +140,7 @@ def readcsvfile(numoftrajstoread=0):
         #trajectories = {id, trajectory}
 
 readcsvfile(5)
+print(str(trajs.get_traveled_dist(3,4,0,0)))
 trajs.interpol_points()
 #print(len(trajs.pathdict))
 trajs.plot()
