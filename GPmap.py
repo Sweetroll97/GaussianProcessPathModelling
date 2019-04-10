@@ -33,22 +33,25 @@ class trajectories:
         self.pathdict[id] = trajectory
         
     def interpol_points(self):
-        max_length = 10000
-        for id in self.pathdict:
-            if len(self.pathdict[id].xs) > max_length:
-                max_length = len(self.pathdict[id].xs)
+        max_length = 500
+        #for id in self.pathdict:
+         #   if len(self.pathdict[id].xs) > max_length:
+          #      max_length = len(self.pathdict[id].xs)
         for id in self.pathdict:
             if len(self.pathdict[id].xs) > 0:
-                #Set first values
+                #Set inital values
                 curr_value = self.pathdict[id].xs[0]
                 y_value = self.pathdict[id].ys[0]
+                
+                #Get endpoint
+                end_x = self.pathdict[id].xs[len(self.pathdict[id].xs)-1]
                 
                 #Get max and min values for x
                 local_max = max(self.pathdict[id].xs)
                 local_min = min(self.pathdict[id].xs)
                 
                 #Calculate movement
-                movement = (float)(local_max-local_min)/(max_length-1)
+                movement = (float)(end_x-curr_value)/(max_length-1)
                 
                 if(movement == 0):
                     continue
@@ -115,7 +118,7 @@ def readcsvfile(numoftrajstoread=0):
                 
         #trajectories = {id, trajectory}
 
-readcsvfile(500)
+readcsvfile(5)
 trajs.interpol_points()
 #print(len(trajs.pathdict))
 trajs.plot()
