@@ -36,8 +36,8 @@ class trajectories:
         
     def get_function_length(self,array_x1,array_y1):
         total_length = 0.0
-        for i in range(len(array_x1)-2):
-            total_length+= self.get_traveled_dist(array_x1[i],array_y1[i],array_x1[i+1],array_y1[i])
+        for i in range(len(array_x1)-1):
+            total_length+= self.get_traveled_dist(array_x1[i],array_y1[i],array_x1[i+1],array_y1[i+1])
         return total_length
         
     
@@ -46,49 +46,67 @@ class trajectories:
         
         
     def interpol_points(self):
-        number_of_observations = 307-1
-        #for id in self.pathdict:
-         #   if len(self.pathdict[id].xs) > max_length:
-          #      max_length = len(self.pathdict[id].xs)
+        number_of_observations = 306
         for id in self.pathdict:
-            #Set initual values
-            curr_interpol_point = np.matrix(( self.pathdict[id].xs[0],self.pathdict[id].ys[0]))
-            
-            #Calculate total length of teh function
+            if len(self.pathdict[id].xs) > number_of_observations:
+                max_length = len(self.pathdict[id].xs)
+                
+        for id in self.pathdict:
+            #Calculate total length of the function
             funcion_length = self.get_function_length(self.pathdict[id].xs, self.pathdict[id].ys)
             
             #Calculate how much to move at each time step
-            Wi= funcion_length/number_of_observations                                    
-            if(Wi == 0):
-                continue
+            num_of_segments = funcion_length/number_of_observations 
+            
             #Creation of temporary lists
             interp_xs = np.array([], (float))
-            interp_ys = np.array([], (float))
+            interp_ys = np.array([], (float))    
             
-            curr_size = len(self.pathdict[id].xs)            
+            #Get 
+            num_of_points = len(self.pathdict[id].xs)-1            
             i = 0
-            while i*Wi <= funcion_length:
-                #LOCAL FUNCTION          
-                last_point = next_point = np.matrix(( [self.pathdict[id].xs[i],self.pathdict[id].ys[i]]))
-                if i != curr_size-1:
+            curr_interpol_point = np.matrix(( self.pathdict[id].xs[i],self.pathdict[id].ys[i])) 
+            global_distance = 0.0
+            
+            while global_distance <= abs(funcion_length):
+                #If we stil not on the last point
+                if i <= num_of_points-1:
+                    last_point =  np.matrix(( [self.pathdict[id].xs[i],self.pathdict[id].ys[i]]))
                     next_point = np.matrix(([self.pathdict[id].xs[i+1],self.pathdict[id].ys[i+1]]))
                     point_distance = np.linalg.norm((next_point-last_point))
-                    curr_distance = 0.0
+                    local_distance = 0.0
                  
-                    while curr_distance <= point_distance:
+                    while local_distance < point_distance:
                         
-                        #Calculate new point and direction
+                        #Add the x and y values to the lists
                         interp_xs = np.append(interp_xs,curr_interpol_point.item(0))
                         interp_ys = np.append(interp_ys,curr_interpol_point.item(1))
-                        temp_point = curr_interpol_point
-                        curr_interpol_point = self.get_next_point(temp_point, curr_interpol_point, next_point, Wi)  
-                        curr_distance += np.linalg.norm((curr_interpol_point-temp_point))
-                        print(curr_interpol_point)
                         
+                        #interpolate a new point                        
+                        curr_interpol_point = self.get_next_point(last_point, curr_interpol_point, next_point, num_of_segments) 
+                        
+                        #Add the walked distance to current distance
+                        local_distance += np.linalg.norm((curr_interpol_point-last_point))
+                        #if curr_distance < point_distance:
+                        last_point = curr_interpol_point
+                elif i == num_of_points:
+                    interp_xs = np.append(interp_xs,self.pathdict[id].xs[curr_list_size])
+                    interp_ys = np.append(interp_ys,self.pathdict[id].ys[curr_list_size])  
+                    
+                else:
+                    global_distance += i*num_of_segments
+                    
+                global_distance += local_distance
                 i+=1
-                print(last_point)
                 
+            plt.scatter(interp_xs,interp_ys)
+            #plt.scatter(self.pathdict[id].xs,self.pathdict[id].ys)
+            plt.show()
+            
                 
+                #print("Last point: ")
+                            #print(last_point)
+                #If we are at the last point
         
     def plot(self):
         
@@ -112,7 +130,6 @@ def readcsvfile(numoftrajstoread=0):
         
         isnewtrajectory = True
         id = 0
-        #newtrajectory = trajectory();
         for row in data:
             if(row[0] == '###'):
                 trajs.add_trajectory(id,newtrajectory)
@@ -131,16 +148,11 @@ def readcsvfile(numoftrajstoread=0):
                     id = row[1]
                     newtrajectory = trajectory()
                     isnewtrajectory = False                    
-                    
-                
-            #if linenr >= 10:
-             #   break;
-            
-                
-        #trajectories = {id, trajectory}
 
-readcsvfile(5)
-print(str(trajs.get_traveled_dist(3,4,0,0)))
+readcsvfile(2)
+
 trajs.interpol_points()
 #print(len(trajs.pathdict))
 trajs.plot()
+
+
