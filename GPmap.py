@@ -3,6 +3,7 @@ import statistics as ss
 import pandas as ps
 import csv
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 class trajectory:
     def __init__(self):
@@ -40,18 +41,26 @@ class trajectories:
             total_length+= self.get_traveled_dist(array_x1[i],array_y1[i],array_x1[i+1],array_y1[i+1])
         return total_length
         
+    def get_next_point(self,curr_index, matrix, distance,):
+        
+        for i in range(len(array_x1)-1):
+            total_length+= self.get_traveled_dist(array[i],matrix.item(0),array[i],matrix.item)
+        return total_length    
     
     def get_next_point(self, last_point, curr_point, next_point, movement):
         return curr_point+((next_point-last_point)/np.linalg.norm((next_point-last_point)))*movement
         
         
     def interpol_points(self):
-        number_of_observations = 306
-        for id in self.pathdict:
-            if len(self.pathdict[id].xs) > number_of_observations:
-                max_length = len(self.pathdict[id].xs)
+        number_of_observations = 30
+        #for id in self.pathdict:
+         #   if len(self.pathdict[id].xs) > number_of_observations:
+          #      number_of_observations = len(self.pathdict[id].xs)-1
                 
-        for id in self.pathdict:
+        for id in tqdm(self.pathdict):
+            
+            if(len(self.pathdict[id].xs) == 0):
+                continue            
             #Calculate total length of the function
             funcion_length = self.get_function_length(self.pathdict[id].xs, self.pathdict[id].ys)
             
@@ -65,10 +74,11 @@ class trajectories:
             #Get 
             num_of_points = len(self.pathdict[id].xs)-1            
             i = 0
+        
             curr_interpol_point = np.matrix(( self.pathdict[id].xs[i],self.pathdict[id].ys[i])) 
             global_distance = 0.0
             
-            while global_distance <= abs(funcion_length):
+            while global_distance <= funcion_length:
                 #If we stil not on the last point
                 if i <= num_of_points-1:
                     last_point =  np.matrix(( [self.pathdict[id].xs[i],self.pathdict[id].ys[i]]))
@@ -90,23 +100,19 @@ class trajectories:
                         #if curr_distance < point_distance:
                         last_point = curr_interpol_point
                 elif i == num_of_points:
-                    interp_xs = np.append(interp_xs,self.pathdict[id].xs[curr_list_size])
-                    interp_ys = np.append(interp_ys,self.pathdict[id].ys[curr_list_size])  
+                    interp_xs = np.append(interp_xs,self.pathdict[id].xs[num_of_points])
+                    interp_ys = np.append(interp_ys,self.pathdict[id].ys[num_of_points])  
                     
                 else:
-                    global_distance += i*num_of_segments
+                    print(i)
                     
                 global_distance += local_distance
                 i+=1
-                
+            plt.scatter(self.pathdict[id].xs,self.pathdict[id].ys)    
             plt.scatter(interp_xs,interp_ys)
-            #plt.scatter(self.pathdict[id].xs,self.pathdict[id].ys)
-            plt.show()
             
-                
-                #print("Last point: ")
-                            #print(last_point)
-                #If we are at the last point
+        plt.show()
+
         
     def plot(self):
         
@@ -149,7 +155,7 @@ def readcsvfile(numoftrajstoread=0):
                     newtrajectory = trajectory()
                     isnewtrajectory = False                    
 
-readcsvfile(2)
+readcsvfile(100)
 
 trajs.interpol_points()
 #print(len(trajs.pathdict))
