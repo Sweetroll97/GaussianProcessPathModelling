@@ -3,6 +3,7 @@ import statistics as ss
 import pandas as ps
 import csv
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 import random as rdm
 import copy
 import string
@@ -32,49 +33,83 @@ class trajectories:
     def add_trajectory(self,id, trajectory):
         self.pathdict[id] = trajectory
         
-    def kmeansclustering(self, k):
+    def kmeansclustering(self, k, treshold = 1000):
         #Generate k centroids
-        rdmkeys = []
-        uniquekey = False
-        for i in range(0, k):
-            while not uniquekey:
-                newkey = rdm.choice(list(self.pathdict.keys()))
-                uniquekey = True
-                for key in rdmkeys:
-                    if newkey is key:
-                        uniquekey = False
-            if uniquekey:
-                rdmkeys.append(newkey)
-                
+        rdmkeys = rdm.sample(list(self.pathdict.keys()), k)
+        istoclose = True
+        while istoclose:
+            istoclose = False
+            for i in range(k):
+                for j in range(i+1,k-1):
+                    if self.calc_distance(self.pathdict[rdmkeys[i]], self.pathdict[rdmkeys[j]]) < treshold:
+                        istoclose = True
+                        isunique = True
+                        while isunique:
+                            newkey = rdm.choice(list(self.pathdict.keys()))
+                            isunique = True
+                            for value in rdmkeys:
+                                if value is newkey:
+                                    isunique = False
+                                    break
+                                 
+                    
+        
+        
         centroids = {}
         for key in rdmkeys:
             centroids[''.join(rdm.choices(string.ascii_uppercase + string.digits, k=5))] = copy.deepcopy(self.pathdict[key])
         #self.plotwx(centroids)
         
-        clusters = {}
-        for key in centroids:
-            clusters[key] = []
-            
-        for pathkey in self.pathdict:
-            mindistance = self.calc_distance(centroids[next(iter(centroids))], self.pathdict[pathkey])
-            minkey = next(iter(centroids.items()))[0]
+        #centroidsold = {}
+        ischanging = True
+        while ischanging:
+            centroidsold = copy.deepcopy(centroids)
+            #connect centroids to closest trajectories to form clusters        
+            clusters = {}
             for key in centroids:
-                newdistance = self.calc_distance(centroids[key], self.pathdict[pathkey])
-                if  newdistance < mindistance:
-                    minkey = key
-                    mindistance = newdistance
-            clusters[minkey].append(pathkey)
+                clusters[key] = []
+            
+            for pathkey in self.pathdict:
+                mindistance = self.calc_distance(centroids[next(iter(centroids))], self.pathdict[pathkey])
+                minkey = next(iter(centroids.items()))[0]
+                for key in centroids:
+                    newdistance = self.calc_distance(centroids[key], self.pathdict[pathkey])
+                    if  newdistance < mindistance:
+                        minkey = key
+                        mindistance = newdistance
+                clusters[minkey].append(pathkey)
         
+            #reassign centroids with means of respective cluster
+            for key in centroids:
+                centroids[key] = self.calc_mean_traj(clusters[key])
+            
+            #self.plotwx(centroids)
+            totdist = 0
+            for key in centroidsold:
+                totdist += self.calc_distance(centroids[key], centroidsold[key])
+            if totdist < 5:
+                ischanging = False
+                self.plotclusters(clusters)
+                return clusters
+            
+    def calc_mean_traj(self, traj):
         numofpoints = len(self.pathdict[next(iter(self.pathdict))].xs)
-        for key in centroids:
+        counter = 0
+        samplecount = len(traj)
+        
+           
+        newmeantraj = trajectory()
+        for i in range(0, numofpoints):
             xsum = 0
             ysum = 0
-            for clusterkey in clusters:
-                self.pathdict[clusters[clusterkey]].xs
-         #centroids[key]
+            tsum = 0
             
-            
-        
+            for value in traj:
+                xsum += self.pathdict[value].xs[i]
+                ysum += self.pathdict[value].ys[i]
+                tsum += self.pathdict[value].timestamp[i]
+            newmeantraj.add_point(tsum/samplecount, xsum/samplecount, ysum/samplecount)
+        return newmeantraj
         
     def calc_distance(self,traj1 , traj2):
         sum = 0.0
@@ -84,9 +119,30 @@ class trajectories:
             b = np.matrix((traj2.xs[i], traj2.ys[i]))
             sum += np.linalg.norm(a-b)
         return sum    
+                                
         
+    
+    def plotclusters(self, clusters):
+        plt.axis([-50000,50000.0,-50000.0,50000.0]) # xmin, xmax, ymin, ymax
+        
+        numofclusters = len(clusters)
+        colorrange = 10000
+        colors = rdm.sample(range(colorrange), numofclusters)
+        count = 0
+        colors = []
+        
+        for i in range(10):
+            colors.append('%06X' % rdm.randint(0, 0xFFFFFF))
             
-
+        for element in clusters:
+            color = (colors[count])
+            #color = cm.hot(float(colors[count])/colorrange)
+            #color = cm.autumn(float(colors[count])/colorrange)
+            for key in clusters[element]:
+                plt.plot(self.pathdict[key].xs, self.pathdict[key].ys, '#'+color)
+            count += 1
+        plt.show()
+        
     def plotwx(self, x):
         
         for id in x:
@@ -140,7 +196,7 @@ def readcsvfile(numoftrajstoread=0):
                 
             else:
                 if not isnewtrajectory:
-                    newtrajectory.add_point(row[0], int(row[2]),int(row[3])) 
+                    newtrajectory.add_point(float(row[0]), int(row[2]),int(row[3])) 
                     
                 else:
                     id = row[1]
@@ -153,7 +209,7 @@ def readcsvfile(numoftrajstoread=0):
 
 #readcsvfile(50)
 
-readcsvfile(5)
+readcsvfile(10)
 
 #keys = []
 #for key in trajs.pathdict:
