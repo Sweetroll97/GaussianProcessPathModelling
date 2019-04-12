@@ -33,14 +33,16 @@ class trajectories:
     def add_trajectory(self,id, trajectory):
         self.pathdict[id] = trajectory
         
-    def kmeansclustering(self, k, treshold = 1000):
+    def kmeansclustering(self, k, treshold = 200000):
         #Generate k centroids
         rdmkeys = rdm.sample(list(self.pathdict.keys()), k)
+        
+        #fix for centroids that is to close
         istoclose = True
         while istoclose:
             istoclose = False
             for i in range(k):
-                for j in range(i+1,k-1):
+                for j in range(i+1,k):
                     if self.calc_distance(self.pathdict[rdmkeys[i]], self.pathdict[rdmkeys[j]]) < treshold:
                         istoclose = True
                         isunique = True
@@ -51,6 +53,8 @@ class trajectories:
                                 if value is newkey:
                                     isunique = False
                                     break
+                            if isunique:
+                                rdmkeys[i] = newkey
                                  
                     
         
