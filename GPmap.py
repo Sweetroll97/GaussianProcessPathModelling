@@ -9,17 +9,22 @@ class trajectory:
     def __init__(self):
         self.xs = np.array([], (float))
         self.ys = np.array([], (float))
+        self.points = np.empty([0,2])#np.array([], (float), ndmin=2)
+        
         self.timestamp = np.array([], (float))
         
     def add_point(self,time,x,y):
         self.xs = np.append(self.xs,x)
         self.ys = np.append(self.ys,y)
+        self.points = np.append(self.points, [[x,y]], axis=0)
         self.timestamp = np.append(self.timestamp,time)
         
-    def add_interpol_point(self,time,x,y):
-        self.xs = np.append(self.xs,x)
-        self.ys = np.append(self.ys,y)
-        self.timestamp = np.append(self.timestamp,time)        
+        
+    def get_length(self):
+        return np.linalg.norm(np.matrix(self.xs)-np.matrix(self.ys))
+        
+        #for valx, valy in xs,ys:
+        #    total_length += 
         
     def get_trajectory():     
         print("not implemented")
@@ -49,6 +54,17 @@ class trajectories:
     
     def get_next_point(self, last_point, curr_point, next_point, movement):
         return curr_point+((next_point-last_point)/np.linalg.norm((next_point-last_point)))*movement
+    
+    def interpol_test(self, N):
+        for id in tqdm(self.pathdict):
+            WL = self.pathdict[id].get_length()/(N-1)
+            #for p1,p2 in zip(self.pathdict[id].points, self.pathdict[id].points[1:]):
+            #    print(item)
+            #    print(nextit)
+            L = [np.linalg.norm(p1-p2) for p1,p2 in zip(self.pathdict[id].points, self.pathdict[id].points[1:])]
+            
+            #L = map(lambda x,y: np.linalg.norm(np.matrix((x,y)), self.pathdict[id]xs, self.pathdict[id].ys))
+            
         
         
     def interpol_points(self):
@@ -103,8 +119,8 @@ class trajectories:
                     interp_xs = np.append(interp_xs,self.pathdict[id].xs[num_of_points])
                     interp_ys = np.append(interp_ys,self.pathdict[id].ys[num_of_points])  
                     
-                else:
-                    print(i)
+                #else:
+                    #print(i)
                     
                 global_distance += local_distance
                 i+=1
@@ -155,9 +171,10 @@ def readcsvfile(numoftrajstoread=0):
                     newtrajectory = trajectory()
                     isnewtrajectory = False                    
 
-readcsvfile(100)
+readcsvfile(10)
+trajs.interpol_test(33)
 
-trajs.interpol_points()
+#trajs.interpol_points()
 #print(len(trajs.pathdict))
 trajs.plot()
 
