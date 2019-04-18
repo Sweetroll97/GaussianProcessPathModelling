@@ -21,7 +21,8 @@ class trajectory:
         
         
     def get_length(self):
-        return np.linalg.norm(np.matrix(self.xs)-np.matrix(self.ys))
+        #return np.linalg.norm(np.matrix(self.xs)-np.matrix(self.ys))
+        return sum([np.linalg.norm(p1-p2) for p1,p2 in zip(self.points, self.points[1:])])
         
         #for valx, valy in xs,ys:
         #    total_length += 
@@ -55,18 +56,33 @@ class trajectories:
     def get_next_point(self, last_point, curr_point, next_point, movement):
         return curr_point+((next_point-last_point)/np.linalg.norm((next_point-last_point)))*movement
     
+    def get_next_point(self, last_point, next_point, movement): 
+        v = next_point-last_point
+        return last_point+v/np.linalg.norm(v)*movement
+    
     def interpol_test(self, N):
         for id in tqdm(self.pathdict):
             WL = self.pathdict[id].get_length()/(N-1)
-            #for p1,p2 in zip(self.pathdict[id].points, self.pathdict[id].points[1:]):
-            #    print(item)
-            #    print(nextit)
             L = [np.linalg.norm(p1-p2) for p1,p2 in zip(self.pathdict[id].points, self.pathdict[id].points[1:])]
-            
-            #L = map(lambda x,y: np.linalg.norm(np.matrix((x,y)), self.pathdict[id]xs, self.pathdict[id].ys))
-            
-        
-        
+          
+            newtraj = trajectory();
+            newtraj.add_point(self.pathdict[id].timestamp, self.pathdict[id].points[0][0], self.pathdict[id].points[0][1])
+            pointofinterest=0
+            walkdist = 0
+            for i in range(1, N-1):            
+                if i*WL <= L[0]:
+                    walkdist += WL
+                    
+                while(i*WL > L[0]):
+                    temp = L.pop(0)
+                    L[0] += temp
+                    pointofinterest+=1
+                    walkdist = L[0]-i*WL
+                
+                newpoint = self.get_next_point(self.pathdict[id].points[pointofinterest], self.pathdict[id].points[pointofinterest+1], walkdist)
+                newtraj.add_point(self.pathdict[id].timestamp[pointofinterest], newpoint[0], newpoint[1]) 
+            newtraj.add_point(self.pathdict[id].timestamp, self.pathdict[id].points[-1][0], self.pathdict[id].points[-1][1])
+            self.pathdict[id] = newtraj       
     def interpol_points(self):
         number_of_observations = 30
         #for id in self.pathdict:
@@ -136,7 +152,7 @@ class trajectories:
         plt.gca().set_autoscale_on(False)
         
         for id in self.pathdict:
-            plt.plot(self.pathdict[id].xs, self.pathdict[id].ys)
+            plt.scatter(self.pathdict[id].xs, self.pathdict[id].ys)
             
         plt.show();
 
@@ -146,7 +162,7 @@ trajs = trajectories()
 def readcsvfile(numoftrajstoread=0):
     global trajs;
     
-    with open('testfile.csv') as data:
+    with open('testfile1.csv') as data:
         data = csv.reader(data, delimiter=',')
         trajnr = 0
         
@@ -154,6 +170,7 @@ def readcsvfile(numoftrajstoread=0):
         id = 0
         for row in data:
             if(row[0] == '###'):
+                #if(newtrajectory.get_length() > 1000):
                 trajs.add_trajectory(id,newtrajectory)
                 trajnr = trajnr + 1;
                 if numoftrajstoread is not 0 and trajnr >= numoftrajstoread:
@@ -169,10 +186,11 @@ def readcsvfile(numoftrajstoread=0):
                     
                     id = row[1]
                     newtrajectory = trajectory()
+                    newtrajectory.add_point(row[0], int(row[2]),int(row[3])) 
                     isnewtrajectory = False                    
 
-readcsvfile(10)
-trajs.interpol_test(33)
+readcsvfile(1)
+trajs.interpol_test(10)
 
 #trajs.interpol_points()
 #print(len(trajs.pathdict))
