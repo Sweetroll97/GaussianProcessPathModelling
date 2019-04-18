@@ -55,10 +55,11 @@ class trajectories:
 
         
     def interpol_points(self):
-        number_of_observations =10
-        for id in self.pathdict:
-            if len(self.pathdict[id].xs) > number_of_observations:
-                number_of_observations = len(self.pathdict[id].xs)-1
+        number_of_observations =30
+        
+        #for id in self.pathdict:
+         #   if len(self.pathdict[id].xs) > number_of_observations:
+          #      number_of_observations = len(self.pathdict[id].xs)-1
 
         for id in tqdm(self.pathdict):
 
@@ -87,38 +88,49 @@ class trajectories:
             interp_ys = np.append(interp_ys,self.pathdict[id].ys[0])            
             while global_distance < funcion_length:
 
-                #Set the last point visited
-                last_point = np.matrix(([self.pathdict[id].xs[i],self.pathdict[id].ys[i]]))
+                #Set the last point visited from
                 if i <= num_of_points-1:
                     last_point = np.matrix(([self.pathdict[id].xs[i],self.pathdict[id].ys[i]]))
                     next_point = np.matrix(([self.pathdict[id].xs[i+1],self.pathdict[id].ys[i+1]]))
                     point_distance = np.linalg.norm((next_point-last_point))                    
                     local_distance = 0.0                    
                     while local_distance < point_distance and i < num_of_points:
-                        if rest_seg > 0.001:
-                            if rest_seg > point_distance or rest_seg+local_distance > point_distance:
+                        if rest_seg > 0.00001:
+                            if (rest_seg+local_distance) > point_distance:    #if rest is bigger then point distance
                                 rest_seg = local_distance+rest_seg-point_distance
-                                local_distance += rest_seg
-                            else:
+                                local_distance = point_distance
+                                i+=1
+                            else:      #If rest smaller then point distance
                                 curr_interpol_point = self.get_next_point(last_point, last_point, next_point, rest_seg)                              
                                 interp_xs = np.append(interp_xs,curr_interpol_point.item(0))
                                 interp_ys = np.append(interp_ys,curr_interpol_point.item(1))                                
                                 local_distance+= rest_seg
                                 rest_seg = 0.0
+                             #If next step not the first and behind next point   
                         elif local_distance+segment_length> point_distance:
                             rest_seg = (local_distance+segment_length)-point_distance
-                            local_distance += (segment_length-rest_seg)
+                            local_distance = point_distance
                             i+=1
-                        elif i <= num_of_points-1:
+                            # If next step before next point
+                        else:
                             curr_interpol_point = self.get_next_point(last_point, curr_interpol_point, next_point,segment_length)                      
                             interp_xs = np.append(interp_xs,curr_interpol_point.item(0))
                             interp_ys = np.append(interp_ys,curr_interpol_point.item(1))  
                             local_distance+= segment_length
-                        else:
-                            i+=1
-                global_distance += local_distance
-            plt.plot(interp_xs,interp_ys)
+
+                    global_distance += local_distance
+
+            print(".............................")
+            
+            print("Goal:")
+            print("x: ",self.pathdict[id].xs[num_of_points])
+            print("x: ",interp_xs[-1])
+            print("y: ",self.pathdict[id].ys[num_of_points])
+            print("y: ",interp_ys[-1])            
+            print(".............................")
+                
             plt.plot(self.pathdict[id].xs,self.pathdict[id].ys)
+            plt.plot(interp_xs,interp_ys)
             plt.show()             
                        
 
@@ -158,7 +170,7 @@ def readcsvfile(numoftrajstoread=0):
         id = 0
         for row in data:
             if(row[0] == '###'):
-                if check_if_valid_trajectory(newtrajectory,1): ##and len(newtrajectory.timestamp) <= 100:
+                if check_if_valid_trajectory(newtrajectory,1000) and len(newtrajectory.timestamp) <= 100:
                     trajs.add_trajectory(id,newtrajectory)
                     trajnr = trajnr + 1;
                 if numoftrajstoread is not 0 and trajnr >= numoftrajstoread:
@@ -177,10 +189,8 @@ def readcsvfile(numoftrajstoread=0):
                     newtrajectory.add_point(row[0], int(row[2]),int(row[3]))
                     isnewtrajectory = False                    
 
-readcsvfile(500)
-
+readcsvfile(200)
 trajs.interpol_points()
-#print(len(trajs.pathdict))
-#trajs.plot()
+
 
 
