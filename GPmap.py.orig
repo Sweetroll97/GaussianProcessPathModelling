@@ -3,11 +3,15 @@ import statistics as ss
 import pandas as ps
 import csv
 import matplotlib.pyplot as plt
-from tqdm import tqdm
+<<<<<<< HEAD
+import matplotlib.cm as cm
 import random as rdm
 import copy
 import string
 from scipy.spatial import distance as dst
+=======
+from tqdm import tqdm
+>>>>>>> interpol
 
 class trajectory:
     def __init__(self):
@@ -36,16 +40,15 @@ class trajectories:
     def add_trajectory(self,id, trajectory):
         self.pathdict[id] = trajectory
         
-    def kmeansclustering(self, k, treshold = 200000):
+<<<<<<< HEAD
+    def kmeansclustering(self, k, treshold = 1000):
         #Generate k centroids
         rdmkeys = rdm.sample(list(self.pathdict.keys()), k)
-        
-        #fix for centroids that is to close
         istoclose = True
         while istoclose:
             istoclose = False
             for i in range(k):
-                for j in range(i+1,k):
+                for j in range(i+1,k-1):
                     if self.calc_distance(self.pathdict[rdmkeys[i]], self.pathdict[rdmkeys[j]]) < treshold:
                         istoclose = True
                         isunique = True
@@ -56,8 +59,6 @@ class trajectories:
                                 if value is newkey:
                                     isunique = False
                                     break
-                            if isunique:
-                                rdmkeys[i] = newkey
                                  
                     
         
@@ -122,6 +123,41 @@ class trajectories:
         sum = 0.0
         numofpoints = len(traj1.xs)
         for i in range(0, numofpoints): #assumes traj1 and traj2 has equal data points
+            a = np.matrix((traj1.xs[i], traj1.ys[i]))
+            b = np.matrix((traj2.xs[i], traj2.ys[i]))
+            sum += np.linalg.norm(a-b)
+        return sum    
+                                
+        
+    
+    def plotclusters(self, clusters):
+        plt.axis([-50000,50000.0,-50000.0,50000.0]) # xmin, xmax, ymin, ymax
+        
+        numofclusters = len(clusters)
+        colorrange = 10000
+        colors = rdm.sample(range(colorrange), numofclusters)
+        count = 0
+        colors = []
+        
+        for i in range(10):
+            colors.append('%06X' % rdm.randint(0, 0xFFFFFF))
+            
+        for element in clusters:
+            color = (colors[count])
+            #color = cm.hot(float(colors[count])/colorrange)
+            #color = cm.autumn(float(colors[count])/colorrange)
+            for key in clusters[element]:
+                plt.plot(self.pathdict[key].xs, self.pathdict[key].ys, '#'+color)
+            count += 1
+        plt.show()
+        
+    def plotwx(self, x):
+        
+        for id in x:
+            plt.plot(x[id].xs, x[id].ys, "*")
+        
+        self.plot()
+=======
     def get_traveled_dist(self,x1,y1,x2,y2):
         return ((x1-x2)**2+(y1-y2)**2)**.5
         
@@ -203,41 +239,7 @@ class trajectories:
             
         plt.show()
 
-        
-            a = np.matrix((traj1.xs[i], traj1.ys[i]))
-            b = np.matrix((traj2.xs[i], traj2.ys[i]))
-            sum += np.linalg.norm(a-b)
-        return sum    
-                                
-        
-    
-    def plotclusters(self, clusters):
-        plt.axis([-50000,50000.0,-50000.0,50000.0]) # xmin, xmax, ymin, ymax
-        
-        numofclusters = len(clusters)
-        colorrange = 10000
-        colors = rdm.sample(range(colorrange), numofclusters)
-        count = 0
-        colors = []
-        
-        for i in range(10):
-            colors.append('%06X' % rdm.randint(0, 0xFFFFFF))
-            
-        for element in clusters:
-            color = (colors[count])
-            #color = cm.hot(float(colors[count])/colorrange)
-            #color = cm.autumn(float(colors[count])/colorrange)
-            for key in clusters[element]:
-                plt.plot(self.pathdict[key].xs, self.pathdict[key].ys, '#'+color)
-            count += 1
-        plt.show()
-        
-    def plotwx(self, x):
-        
-        for id in x:
-            plt.plot(x[id].xs, x[id].ys, "*")
-        
-        self.plot()
+>>>>>>> interpol
         
     def plot(self):
         
@@ -292,10 +294,9 @@ def readcsvfile(numoftrajstoread=0):
                     id = row[1]
                     newtrajectory = trajectory()
                     isnewtrajectory = False                    
-
-readcsvfile(100)
-
-trajs.interpol_points()
+<<<<<<< HEAD
+                    
+                
             
                 
 
@@ -310,3 +311,13 @@ readcsvfile(10)
 
 #trajs.plot()
 trajs.kmeansclustering(3)
+=======
+
+readcsvfile(100)
+
+trajs.interpol_points()
+#print(len(trajs.pathdict))
+trajs.plot()
+
+
+>>>>>>> interpol
