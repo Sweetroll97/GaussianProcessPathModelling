@@ -3,31 +3,33 @@ import statistics as ss
 import pandas as ps
 import csv
 import matplotlib.pyplot as plt
-<<<<<<< HEAD
-import matplotlib.cm as cm
+from tqdm import tqdm
 import random as rdm
 import copy
 import string
 from scipy.spatial import distance as dst
-=======
-from tqdm import tqdm
->>>>>>> interpol
 
 class trajectory:
     def __init__(self):
         self.xs = np.array([], (float))
         self.ys = np.array([], (float))
+        self.points = np.empty([0,2])#np.array([], (float), ndmin=2)
+        
         self.timestamp = np.array([], (float))
         
     def add_point(self,time,x,y):
         self.xs = np.append(self.xs,x)
         self.ys = np.append(self.ys,y)
+        self.points = np.append(self.points, [[x,y]], axis=0)
         self.timestamp = np.append(self.timestamp,time)
         
-    def add_interpol_point(self,time,x,y):
-        self.xs = np.append(self.xs,x)
-        self.ys = np.append(self.ys,y)
-        self.timestamp = np.append(self.timestamp,time)        
+        
+    def get_length(self):
+        #return np.linalg.norm(np.matrix(self.xs)-np.matrix(self.ys))
+        return sum([np.linalg.norm(p1-p2) for p1,p2 in zip(self.points, self.points[1:])])
+        
+        #for valx, valy in xs,ys:
+        #    total_length += 
         
     def get_trajectory():     
         print("not implemented")
@@ -40,15 +42,16 @@ class trajectories:
     def add_trajectory(self,id, trajectory):
         self.pathdict[id] = trajectory
         
-<<<<<<< HEAD
-    def kmeansclustering(self, k, treshold = 1000):
+    def kmeansclustering(self, k, treshold = 200000):
         #Generate k centroids
         rdmkeys = rdm.sample(list(self.pathdict.keys()), k)
+        
+        #fix for centroids that is to close
         istoclose = True
         while istoclose:
             istoclose = False
             for i in range(k):
-                for j in range(i+1,k-1):
+                for j in range(i+1,k):
                     if self.calc_distance(self.pathdict[rdmkeys[i]], self.pathdict[rdmkeys[j]]) < treshold:
                         istoclose = True
                         isunique = True
@@ -59,6 +62,8 @@ class trajectories:
                                 if value is newkey:
                                     isunique = False
                                     break
+                            if isunique:
+                                rdmkeys[i] = newkey
                                  
                     
         
@@ -123,41 +128,6 @@ class trajectories:
         sum = 0.0
         numofpoints = len(traj1.xs)
         for i in range(0, numofpoints): #assumes traj1 and traj2 has equal data points
-            a = np.matrix((traj1.xs[i], traj1.ys[i]))
-            b = np.matrix((traj2.xs[i], traj2.ys[i]))
-            sum += np.linalg.norm(a-b)
-        return sum    
-                                
-        
-    
-    def plotclusters(self, clusters):
-        plt.axis([-50000,50000.0,-50000.0,50000.0]) # xmin, xmax, ymin, ymax
-        
-        numofclusters = len(clusters)
-        colorrange = 10000
-        colors = rdm.sample(range(colorrange), numofclusters)
-        count = 0
-        colors = []
-        
-        for i in range(10):
-            colors.append('%06X' % rdm.randint(0, 0xFFFFFF))
-            
-        for element in clusters:
-            color = (colors[count])
-            #color = cm.hot(float(colors[count])/colorrange)
-            #color = cm.autumn(float(colors[count])/colorrange)
-            for key in clusters[element]:
-                plt.plot(self.pathdict[key].xs, self.pathdict[key].ys, '#'+color)
-            count += 1
-        plt.show()
-        
-    def plotwx(self, x):
-        
-        for id in x:
-            plt.plot(x[id].xs, x[id].ys, "*")
-        
-        self.plot()
-=======
     def get_traveled_dist(self,x1,y1,x2,y2):
         return ((x1-x2)**2+(y1-y2)**2)**.5
         
@@ -175,8 +145,34 @@ class trajectories:
     
     def get_next_point(self, last_point, curr_point, next_point, movement):
         return curr_point+((next_point-last_point)/np.linalg.norm((next_point-last_point)))*movement
-        
-        
+    
+    def get_next_point(self, last_point, next_point, movement): 
+        v = next_point-last_point
+        return last_point+v/np.linalg.norm(v)*movement
+    
+    def interpol_test(self, N):
+        for id in tqdm(self.pathdict):
+            WL = self.pathdict[id].get_length()/(N-1)
+            L = [np.linalg.norm(p1-p2) for p1,p2 in zip(self.pathdict[id].points, self.pathdict[id].points[1:])]
+          
+            newtraj = trajectory();
+            newtraj.add_point(self.pathdict[id].timestamp, self.pathdict[id].points[0][0], self.pathdict[id].points[0][1])
+            pointofinterest=0
+            walkdist = 0
+            for i in range(1, N-1):            
+                if i*WL <= L[0]:
+                    walkdist += WL
+                    
+                while(i*WL > L[0]):
+                    temp = L.pop(0)
+                    L[0] += temp
+                    pointofinterest+=1
+                    walkdist = L[0]-i*WL
+                
+                newpoint = self.get_next_point(self.pathdict[id].points[pointofinterest], self.pathdict[id].points[pointofinterest+1], walkdist)
+                newtraj.add_point(self.pathdict[id].timestamp[pointofinterest], newpoint[0], newpoint[1]) 
+            newtraj.add_point(self.pathdict[id].timestamp, self.pathdict[id].points[-1][0], self.pathdict[id].points[-1][1])
+            self.pathdict[id] = newtraj       
     def interpol_points(self):
         number_of_observations = 30
         #for id in self.pathdict:
@@ -229,8 +225,8 @@ class trajectories:
                     interp_xs = np.append(interp_xs,self.pathdict[id].xs[num_of_points])
                     interp_ys = np.append(interp_ys,self.pathdict[id].ys[num_of_points])  
                     
-                else:
-                    print(i)
+                #else:
+                    #print(i)
                     
                 global_distance += local_distance
                 i+=1
@@ -239,7 +235,41 @@ class trajectories:
             
         plt.show()
 
->>>>>>> interpol
+        
+            a = np.matrix((traj1.xs[i], traj1.ys[i]))
+            b = np.matrix((traj2.xs[i], traj2.ys[i]))
+            sum += np.linalg.norm(a-b)
+        return sum    
+                                
+        
+    
+    def plotclusters(self, clusters):
+        plt.axis([-50000,50000.0,-50000.0,50000.0]) # xmin, xmax, ymin, ymax
+        
+        numofclusters = len(clusters)
+        colorrange = 10000
+        colors = rdm.sample(range(colorrange), numofclusters)
+        count = 0
+        colors = []
+        
+        for i in range(10):
+            colors.append('%06X' % rdm.randint(0, 0xFFFFFF))
+            
+        for element in clusters:
+            color = (colors[count])
+            #color = cm.hot(float(colors[count])/colorrange)
+            #color = cm.autumn(float(colors[count])/colorrange)
+            for key in clusters[element]:
+                plt.plot(self.pathdict[key].xs, self.pathdict[key].ys, '#'+color)
+            count += 1
+        plt.show()
+        
+    def plotwx(self, x):
+        
+        for id in x:
+            plt.plot(x[id].xs, x[id].ys, "*")
+        
+        self.plot()
         
     def plot(self):
         
@@ -247,7 +277,7 @@ class trajectories:
         #plt.gca().set_autoscale_on(False)
         
         for id in self.pathdict:
-            plt.plot(self.pathdict[id].xs, self.pathdict[id].ys)
+            plt.scatter(self.pathdict[id].xs, self.pathdict[id].ys)
             
         plt.show();
 
@@ -269,7 +299,7 @@ def check_if_valid_trajectory(traj, minimumtraveldistance = 1):
 def readcsvfile(numoftrajstoread=0):
     global trajs;
     
-    with open('testfile.csv') as data:
+    with open('testfile1.csv') as data:
         data = csv.reader(data, delimiter=',')
         trajnr = 0
         
@@ -277,9 +307,15 @@ def readcsvfile(numoftrajstoread=0):
         id = 0
         for row in data:
             if(row[0] == '###'):
+<<<<<<< HEAD
+                #if(newtrajectory.get_length() > 1000):
+                trajs.add_trajectory(id,newtrajectory)
+                trajnr = trajnr + 1;
+=======
                 if check_if_valid_trajectory(newtrajectory, 1000) and len(newtrajectory.timestamp) == 33:
                     trajs.add_trajectory(id,newtrajectory)
                     trajnr = trajnr + 1;
+>>>>>>> debug
                 if numoftrajstoread is not 0 and trajnr >= numoftrajstoread:
                     break;
                 newtrajectory = trajectory()
@@ -293,16 +329,25 @@ def readcsvfile(numoftrajstoread=0):
                     
                     id = row[1]
                     newtrajectory = trajectory()
+                    newtrajectory.add_point(row[0], int(row[2]),int(row[3])) 
                     isnewtrajectory = False                    
+
+readcsvfile(1)
+trajs.interpol_test(10)
+
 <<<<<<< HEAD
-                    
-                
+#trajs.interpol_points()
+#print(len(trajs.pathdict))
+trajs.plot()
+=======
+trajs.interpol_points()
             
                 
 
 #readcsvfile(50)
 
 readcsvfile(10)
+>>>>>>> debug
 
 #keys = []
 #for key in trajs.pathdict:
@@ -311,13 +356,3 @@ readcsvfile(10)
 
 #trajs.plot()
 trajs.kmeansclustering(3)
-=======
-
-readcsvfile(100)
-
-trajs.interpol_points()
-#print(len(trajs.pathdict))
-trajs.plot()
-
-
->>>>>>> interpol
