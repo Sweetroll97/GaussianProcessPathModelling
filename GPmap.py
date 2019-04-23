@@ -55,7 +55,7 @@ class trajectories:
 
         
     def interpol_points(self):
-        number_of_observations =30
+        number_of_observations =15
         
         #for id in self.pathdict:
          #   if len(self.pathdict[id].xs) > number_of_observations:
@@ -75,7 +75,7 @@ class trajectories:
             interp_xs = np.array([], (float))
             interp_ys = np.array([], (float))    
 
-            #Get 
+            #Get num of points 
             num_of_points = len(self.pathdict[id].xs)-1            
             i = 0
 
@@ -95,9 +95,13 @@ class trajectories:
                     point_distance = np.linalg.norm((next_point-last_point))                    
                     local_distance = 0.0                    
                     while local_distance < point_distance and i < num_of_points:
-                        if rest_seg > 0.00001:
-                            if (rest_seg+local_distance) > point_distance:    #if rest is bigger then point distance
-                                rest_seg = local_distance+rest_seg-point_distance
+                        if rest_seg > 0.00000001:
+                            if rest_seg > point_distance:    #if rest is bigger then point distance
+                                if abs(rest_seg-point_distance) < 0.0001:
+                                    curr_interpol_point = self.get_next_point(last_point, last_point, next_point, rest_seg)                              
+                                    interp_xs = np.append(interp_xs,curr_interpol_point.item(0))
+                                    interp_ys = np.append(interp_ys,curr_interpol_point.item(1))                                    
+                                rest_seg = rest_seg-point_distance
                                 local_distance = point_distance
                                 i+=1
                             else:      #If rest smaller then point distance
@@ -107,7 +111,7 @@ class trajectories:
                                 local_distance+= rest_seg
                                 rest_seg = 0.0
                              #If next step not the first and behind next point   
-                        elif local_distance+segment_length> point_distance:
+                        elif (local_distance+segment_length)> point_distance:
                             rest_seg = (local_distance+segment_length)-point_distance
                             local_distance = point_distance
                             i+=1
@@ -119,6 +123,11 @@ class trajectories:
                             local_distance+= segment_length
 
                     global_distance += local_distance
+                    plt.plot(self.pathdict[id].xs,self.pathdict[id].ys)
+                    plt.plot(interp_xs,interp_ys)
+                    plt.scatter(interp_xs,interp_ys)
+                    plt.show()                    
+                    
 
             print(".............................")
             
@@ -131,6 +140,7 @@ class trajectories:
                 
             plt.plot(self.pathdict[id].xs,self.pathdict[id].ys)
             plt.plot(interp_xs,interp_ys)
+            plt.scatter(interp_xs,interp_ys)
             plt.show()             
                        
 
