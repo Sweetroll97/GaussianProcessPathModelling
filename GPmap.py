@@ -76,9 +76,10 @@ class trajectories:
             interp_ys = np.array([], (float))    
 
             #Get num of points 
-            num_of_points = len(self.pathdict[id].xs)-1            
+            num_of_points = len(self.pathdict[id].xs)-1
+            
+            #Set init values
             i = 0
-
             curr_interpol_point = last_point = np.matrix(( self.pathdict[id].xs[i],self.pathdict[id].ys[i]))            
             global_distance = 0.0
             point_distance = 0.0
