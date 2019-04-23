@@ -97,7 +97,7 @@ class trajectories:
                     while local_distance < point_distance and i < num_of_points:
                         if rest_seg > 0.00000001:
                             if rest_seg > point_distance:    #if rest is bigger then point distance
-                                if abs(rest_seg-point_distance) < 0.0001:
+                                if abs(rest_seg-point_distance) < 0.1:
                                     curr_interpol_point = self.get_next_point(last_point, last_point, next_point, rest_seg)                              
                                     interp_xs = np.append(interp_xs,curr_interpol_point.item(0))
                                     interp_ys = np.append(interp_ys,curr_interpol_point.item(1))                                    
@@ -112,6 +112,10 @@ class trajectories:
                                 rest_seg = 0.0
                              #If next step not the first and behind next point   
                         elif (local_distance+segment_length)> point_distance:
+                            if abs(local_distance+segment_length-point_distance) < 0.1:
+                                curr_interpol_point = self.get_next_point(last_point, curr_interpol_point, next_point, segment_length)                              
+                                interp_xs = np.append(interp_xs,curr_interpol_point.item(0))
+                                interp_ys = np.append(interp_ys,curr_interpol_point.item(1))                             
                             rest_seg = (local_distance+segment_length)-point_distance
                             local_distance = point_distance
                             i+=1
@@ -123,10 +127,10 @@ class trajectories:
                             local_distance+= segment_length
 
                     global_distance += local_distance
-                    plt.plot(self.pathdict[id].xs,self.pathdict[id].ys)
-                    plt.plot(interp_xs,interp_ys)
-                    plt.scatter(interp_xs,interp_ys)
-                    plt.show()                    
+                    #plt.plot(self.pathdict[id].xs,self.pathdict[id].ys)
+                    #plt.plot(interp_xs,interp_ys)
+                    #plt.scatter(interp_xs,interp_ys)
+                    #plt.show()                    
                     
 
             print(".............................")
