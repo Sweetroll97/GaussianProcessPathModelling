@@ -56,11 +56,20 @@ class trajectories:
     def get_next_point(self, last_point, curr_point, next_point, movement):
         direct = ((next_point-last_point)/np.linalg.norm((next_point-last_point)))
         return curr_point+direct*movement
-        
-       
-    
-      
 
+    def get_length_to_each_point(self,id):
+        last_object = [self.pathdict[id].xs[0],self.pathdict[id].ys[0]]
+        dist = 0.0
+        li = [0.0]
+        i = 0
+        for point in self.pathdict[id].points:
+            if i != 0:
+                dist += self.get_traveled_dist(last_object[0],last_object[1],point[0],point[1])
+                li.append(dist)
+            last_object = point                
+            i+=1
+        print(li)
+        return li
         
     def interpol_points(self):
         number_of_observations = 30
@@ -150,7 +159,49 @@ class trajectories:
             plt.plot(self.pathdict[id].xs,self.pathdict[id].ys)
             plt.plot(temp_traj.points[:,0],temp_traj.points[:,1])
             plt.scatter(temp_traj.points[:,0],temp_traj.points[:,1],color='orange')
-            plt.show()                          
+            plt.show()      
+            
+    def interpol_points2(self):
+        number_of_observations = 10
+        
+        #for id in self.pathdict:
+         #   if len(self.pathdict[id].xs) > number_of_observations:
+          #      number_of_observations = len(self.pathdict[id].xs)-1
+
+        for id in tqdm(self.pathdict):
+
+            if(len(self.pathdict[id].xs) == 0):
+                continue            
+            #Calculate total length of the function
+            funcion_length = self.get_function_length(self.pathdict[id].xs, self.pathdict[id].ys)
+
+            #Calculate how much to move at each time step
+            segment_length = funcion_length/number_of_observations 
+            li = self.get_length_to_each_point(id)
+            temp_traj = trajectory()            
+            total_length = 0.0
+            j = 1
+            for i in range(0,number_of_observations+1):
+                while i*segment_length > li[j]+0.0002:
+                    if  j < len(li)-1:
+                        j+=1
+                last_point = self.pathdict[id].points[j-1]
+                next_point = self.pathdict[id].points[j]
+                rest_segment = i*segment_length-li[j-1]
+                curr_interpol_point = self.get_next_point(last_point, last_point, next_point,rest_segment) 
+                temp_traj.add_point(self.pathdict[id].timestamp,curr_interpol_point.item(0),curr_interpol_point.item(1))
+            print(".............................")
+            
+            print("Goal:")
+            print("x: ",self.pathdict[id].xs[-1])
+            print("x: ",temp_traj.xs[-1])
+            print("y: ",self.pathdict[id].ys[-1])
+            print("y: ",temp_traj.ys[-1])            
+            print(".............................")
+            plt.plot(self.pathdict[id].xs,self.pathdict[id].ys)
+            plt.plot(temp_traj.points[:,0],temp_traj.points[:,1])
+            plt.scatter(temp_traj.points[:,0],temp_traj.points[:,1],color='orange')
+            plt.show()              
                        
 
         
@@ -189,7 +240,7 @@ def readcsvfile(numoftrajstoread=0):
         id = 0
         for row in data:
             if(row[0] == '###'):
-                if newtrajectory.get_length() > 300:
+                if newtrajectory.get_length() > 1000:
                     trajs.add_trajectory(id,newtrajectory)
                     trajnr = trajnr + 1;
                 if numoftrajstoread is not 0 and trajnr >= numoftrajstoread:
@@ -208,7 +259,7 @@ def readcsvfile(numoftrajstoread=0):
                     newtrajectory.add_point(row[0], int(row[2]),int(row[3]))
                     isnewtrajectory = False                    
 
-readcsvfile(30)
+readcsvfile(200)
 trajs.interpol_points2()
 
 
