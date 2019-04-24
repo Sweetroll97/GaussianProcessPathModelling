@@ -23,6 +23,11 @@ class trajectory:
         self.ys = np.append(self.ys,y)
         self.points = np.append(self.points, [[x,y,time]], axis=0)
         self.timestamp = np.append(self.timestamp,time)
+    def remove_point(self, time, x,y):
+        self.xs = np.delete(self.xs,np.where(x))
+        self.ys = np.delete(self.ys,np.where(y))
+        self.points = np.delete(self.points, np.where([[x,y,time]]), axis=0)
+        self.timestamp = np.delete(self.timestamp,time)
         
     def get_length(self):
         return sum([np.linalg.norm(p1[:2]-p2[:2]) for p1,p2 in zip(self.points, self.points[1:])])
@@ -39,12 +44,14 @@ class trajectories:
     def add_trajectory(self,id, trajectory):
         self.pathdict[id] = trajectory
        
-    def filter_noise(self):
-        print("not implemented")
-#        for key in self.pathdict:
-#            for idx, point in enumerate(zip(self.pathdict[key].points, self.pathdict[key].points[1:])):
-#                dist = np.linalg.norm(p2-p1)
-                
+    def filter_noise(self, treshold = 100):
+        minlength = treshold - 1
+        while minlength < treshold:
+            for key in self.pathdict:
+                for point, nextpoint in zip(self.pathdict[key].points,self.pathdict[key].points[1:]):
+                    if np.linalg.norm(nextpoint - point) < treshold:
+                        self.pathdict[key].remove_point(nextpoint[2], nextpoint[0], nextpoint[1])
+            minlength = min([np.linalg.norm(p1-p2) for p1,p2 in zip(self.pathdict[key].points, self.pathdict[key].points[1:])])
                 
     def kmeansclustering(self, k, treshold = 200000):
         #Generate k centroids
@@ -117,23 +124,11 @@ class trajectories:
             newmeantraj.add_point(tsum/samplecount, xsum/samplecount, ysum/samplecount)
         return newmeantraj
         
-    def calc_distance(self,traj1 , traj2):
+    def calc_distance(self,traj1 , traj2): #calculates an abstract distance beetween two trajectories
         return sum([np.linalg.norm(p1[:2]-p2[:2]) for p1,p2 in zip(traj1.points, traj2.points)])
             
     def get_traveled_dist(self,x1,y1,x2,y2):
         return ((x1-x2)**2+(y1-y2)**2)**.5
-        
-    def get_function_length(self,array_x1,array_y1):
-        total_length = 0.0
-        for i in range(len(array_x1)-1):
-            total_length+= self.get_traveled_dist(array_x1[i],array_y1[i],array_x1[i+1],array_y1[i+1])
-        return total_length
-        
-    def get_right_point(self,curr_index, matrix, distance,):
-        
-        for i in range(len(array_x1)-1):
-            total_length+= self.get_traveled_dist(array[i],matrix.item(0),array[i],matrix.item)
-        return total_length    
     
     def get_next_point(self, last_point, curr_point, next_point, movement):
         direct = ((next_point-last_point)/np.linalg.norm((next_point-last_point)))
@@ -164,7 +159,7 @@ class trajectories:
                 newpoint = self.get_next_point(self.pathdict[id].points[pointofinterest], self.pathdict[id].points[pointofinterest+1], WL*i-sumofpassedpoints)
                 newtraj.add_point(self.pathdict[id].timestamp[pointofinterest], newpoint[0], newpoint[1]) 
             newtraj.add_point(self.pathdict[id].timestamp, self.pathdict[id].points[-1][0], self.pathdict[id].points[-1][1])
-            plt.plot(self.pathdict[id].xs, self.pathdict[id].ys, "b*")
+            plt.plot(self.pathdict[id].points[:,0], self.pathdict[id].points[:,1], "b*")
             self.pathdict[id] = newtraj
             
     def interpol_points(self,number_of_observations = 15):
@@ -179,10 +174,10 @@ class trajectories:
             if(len(self.pathdict[id].xs) == 0):
                 continue            
             #Calculate total length of the function
-            funcion_length = self.get_function_length(self.pathdict[id].xs, self.pathdict[id].ys)
+            funcion_length = self.pathdict[id].get_length()
 
             #Calculate how much to move at each time step
-            segment_length = funcion_length/number_of_observations 
+            segment_length = funcion_length/(number_of_observations-1) 
 
             #Creation of temporary lists
             interp_xs = np.array([], (float))
@@ -198,11 +193,11 @@ class trajectories:
             point_distance = 0.0
             rest_segment = 0.0
             temp_traj = trajectory()
-            temp_traj.add_point(self.pathdict[id].timestamp,self.pathdict[id].xs[0],self.pathdict[id].ys[0])
+            temp_traj.add_point(self.pathdict[id].timestamp[0],self.pathdict[id].xs[0],self.pathdict[id].ys[0])
             while global_distance < funcion_length:
 
                 #Set the last point visited from
-                if i <= number_of_points-1:
+                if i <= number_of_points: #previous -1, why?
                     last_point = np.matrix(([self.pathdict[id].xs[i],self.pathdict[id].ys[i]]))
                     next_point = np.matrix(([self.pathdict[id].xs[i+1],self.pathdict[id].ys[i+1]]))
                     point_distance = np.linalg.norm((next_point-last_point))                    
@@ -211,28 +206,28 @@ class trajectories:
                         if rest_segment > 0.00000001:
                             if rest_segment > point_distance:    #if rest is bigger then point distance
                                 if abs(rest_segment-point_distance) < 0.1:
-                                    curr_interpol_point = self.get_next_point(last_point, last_point, next_point, rest_segment)     
+                                    curr_interpol_point = self.get_next_point(last_point, next_point, rest_segment)     
                                     temp_traj.add_point(self.pathdict[id].timestamp,curr_interpol_point.item(0),curr_interpol_point.item(1))
                                     
                                 rest_segment = rest_segment-point_distance
                                 local_distance = point_distance
                                 i+=1
                             else:      #If rest smaller then point distance
-                                curr_interpol_point = self.get_next_point(last_point, last_point, next_point, rest_segment)  
+                                curr_interpol_point = self.get_next_point(last_point, next_point, rest_segment)  
                                 temp_traj.add_point(self.pathdict[id].timestamp,curr_interpol_point.item(0),curr_interpol_point.item(1))
                                 local_distance+= rest_segment
                                 rest_segment = 0.0
                              #If next step not the first and behind next point   
                         elif (local_distance+segment_length)> point_distance:
                             if abs(local_distance+segment_length-point_distance) < 0.1:
-                                curr_interpol_point = self.get_next_point(last_point, curr_interpol_point, next_point, segment_length)      
+                                curr_interpol_point = self.get_next_point(curr_interpol_point, next_point, segment_length)      
                                 temp_traj.add_point(self.pathdict[id].timestamp,curr_interpol_point.item(0),curr_interpol_point.item(1))
                             rest_segment = (local_distance+segment_length)-point_distance
                             local_distance = point_distance
                             i+=1
                             # If next step before next point
                         else:
-                            curr_interpol_point = self.get_next_point(last_point, curr_interpol_point, next_point,segment_length)    
+                            curr_interpol_point = self.get_next_point(curr_interpol_point, next_point,segment_length)    
                             temp_traj.add_point(self.pathdict[id].timestamp,curr_interpol_point.item(0),curr_interpol_point.item(1))
                             local_distance+= segment_length
 
@@ -343,4 +338,4 @@ trajs.interpol_test(10)
 #trajs.calc_distance(trajs.pathdict[keys[0]], trajs.pathdict[keys[1]])
 trajs.plot()
 
-trajs.kmeansclustering(3, )
+trajs.kmeansclustering(3)
