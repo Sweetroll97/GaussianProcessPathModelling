@@ -35,6 +35,7 @@ class trajectory:
         return sum([np.linalg.norm(p1[:2]-p2[:2]) for p1,p2 in zip(self.points, self.points[1:])])
         
         
+        
     def get_trajectory():     
         print("not implemented")
         
@@ -144,7 +145,7 @@ class trajectories:
     def get_next_point(self, last_point, curr_point, next_point, movement):
         direct = ((next_point-last_point)/np.linalg.norm((next_point-last_point)))
         return curr_point+direct*movement
-        
+
     def get_next_point(self, last_point, next_point, movement): 
         v = next_point-last_point
         return last_point+v/np.linalg.norm(v)*movement
@@ -174,7 +175,6 @@ class trajectories:
             self.pathdict[id] = newtraj
             
     def interpol_points(self,number_of_observations = 15):
-        
         
         #for id in self.pathdict:
          #   if len(self.pathdict[id].xs) > number_of_observations:
@@ -285,9 +285,51 @@ class trajectories:
             for key in clusters[element]:
                 plt.plot(self.pathdict[key].xs, self.pathdict[key].ys, '#'+color)
             count += 1
-        plt.show()
-        
+            plt.show()      
+            
     def plotwx(self, x):
+    def interpol_points2(self):
+        number_of_observations = 10
+        
+        #for id in self.pathdict:
+         #   if len(self.pathdict[id].xs) > number_of_observations:
+          #      number_of_observations = len(self.pathdict[id].xs)-1
+
+        for id in tqdm(self.pathdict):
+
+            if(len(self.pathdict[id].xs) == 0):
+                continue            
+            #Calculate total length of the function
+            funcion_length = self.get_function_length(self.pathdict[id].xs, self.pathdict[id].ys)
+
+            #Calculate how much to move at each time step
+            segment_length = funcion_length/number_of_observations 
+            li = self.get_length_to_each_point(id)
+            temp_traj = trajectory()            
+            total_length = 0.0
+            j = 1
+            for i in range(0,number_of_observations+1):
+                while i*segment_length > li[j]+0.0002:
+                    if  j < len(li)-1:
+                        j+=1
+                last_point = self.pathdict[id].points[j-1]
+                next_point = self.pathdict[id].points[j]
+                rest_segment = i*segment_length-li[j-1]
+                curr_interpol_point = self.get_next_point(last_point, last_point, next_point,rest_segment) 
+                temp_traj.add_point(self.pathdict[id].timestamp,curr_interpol_point.item(0),curr_interpol_point.item(1))
+            print(".............................")
+            
+            print("Goal:")
+            print("x: ",self.pathdict[id].xs[-1])
+            print("x: ",temp_traj.xs[-1])
+            print("y: ",self.pathdict[id].ys[-1])
+            print("y: ",temp_traj.ys[-1])            
+            print(".............................")
+            plt.plot(self.pathdict[id].xs,self.pathdict[id].ys)
+            plt.plot(temp_traj.points[:,0],temp_traj.points[:,1])
+            plt.scatter(temp_traj.points[:,0],temp_traj.points[:,1],color='orange')
+            plt.show()              
+                       
         
         for id in x:
             plt.plot(x[id].xs, x[id].ys, "*")
