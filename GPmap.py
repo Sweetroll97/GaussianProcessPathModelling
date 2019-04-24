@@ -24,10 +24,12 @@ class trajectory:
         self.points = np.append(self.points, [[x,y,time]], axis=0)
         self.timestamp = np.append(self.timestamp,time)
     def remove_point(self, time, x,y):
-        self.xs = np.delete(self.xs,np.where(x))
-        self.ys = np.delete(self.ys,np.where(y))
-        self.points = np.delete(self.points, np.where([[x,y,time]]), axis=0)
-        self.timestamp = np.delete(self.timestamp,time)
+        #self.xs = np.delete(self.xs,np.where(self.xs == x))
+        #self.ys = np.delete(self.ys,np.where(self.ys == y))
+        #self.timestamp = np.delete(self.timestamp,np.where(self.timestamp == time))
+        self.points = np.delete(self.points, np.where(self.points == [[x,y,time]])[0], axis=0)
+        if len(self.points) < 3: return True
+        else: return False
         
     def get_length(self):
         return sum([np.linalg.norm(p1[:2]-p2[:2]) for p1,p2 in zip(self.points, self.points[1:])])
@@ -44,14 +46,23 @@ class trajectories:
     def add_trajectory(self,id, trajectory):
         self.pathdict[id] = trajectory
        
-    def filter_noise(self, treshold = 100):
+    def filter_noise(self, treshold = 500):
         minlength = treshold - 1
+        isdead = False
         while minlength < treshold:
             for key in self.pathdict:
                 for point, nextpoint in zip(self.pathdict[key].points,self.pathdict[key].points[1:]):
                     if np.linalg.norm(nextpoint - point) < treshold:
-                        self.pathdict[key].remove_point(nextpoint[2], nextpoint[0], nextpoint[1])
-            minlength = min([np.linalg.norm(p1-p2) for p1,p2 in zip(self.pathdict[key].points, self.pathdict[key].points[1:])])
+                        isdead = self.pathdict[key].remove_point(nextpoint[2], nextpoint[0], nextpoint[1])
+                
+                if isdead:
+                    break
+                    
+            if isdead: 
+                self.pathdict.pop(key)
+                isdead = False
+            else:
+                minlength = min([np.linalg.norm(p1-p2) for p1,p2 in zip(self.pathdict[key].points, self.pathdict[key].points[1:])])
                 
     def kmeansclustering(self, k, treshold = 200000):
         #Generate k centroids
@@ -108,7 +119,7 @@ class trajectories:
                 return clusters
             
     def calc_mean_traj(self, traj):
-        numofpoints = len(self.pathdict[next(iter(self.pathdict))].xs)
+        numofpoints = len(self.pathdict[next(iter(self.pathdict))].points)
         samplecount = len(traj)
              
         newmeantraj = trajectory()
@@ -143,7 +154,7 @@ class trajectories:
             WL = self.pathdict[id].get_length()/(N-1)
             L = [np.linalg.norm(p1-p2) for p1,p2 in zip(self.pathdict[id].points, self.pathdict[id].points[1:])]
             newtraj = trajectory();
-            newtraj.add_point(self.pathdict[id].timestamp, self.pathdict[id].points[0][0], self.pathdict[id].points[0][1])
+            newtraj.add_point(self.pathdict[id].points[0][2], self.pathdict[id].points[0][0], self.pathdict[id].points[0][1])
             pointofinterest=0
             sumofpassedpoints = 0
             disttonextpoint = copy.deepcopy(L)
@@ -157,8 +168,8 @@ class trajectories:
                     sumofpassedpoints = sum(L[0:pointofinterest])
                 
                 newpoint = self.get_next_point(self.pathdict[id].points[pointofinterest], self.pathdict[id].points[pointofinterest+1], WL*i-sumofpassedpoints)
-                newtraj.add_point(self.pathdict[id].timestamp[pointofinterest], newpoint[0], newpoint[1]) 
-            newtraj.add_point(self.pathdict[id].timestamp, self.pathdict[id].points[-1][0], self.pathdict[id].points[-1][1])
+                newtraj.add_point(newpoint[2], newpoint[0], newpoint[1]) 
+            newtraj.add_point(self.pathdict[id].points[-1][2], self.pathdict[id].points[-1][0], self.pathdict[id].points[-1][1])
             plt.plot(self.pathdict[id].points[:,0], self.pathdict[id].points[:,1], "b*")
             self.pathdict[id] = newtraj
             
@@ -306,7 +317,7 @@ def readcsvfile(numoftrajstoread=0):
         id = 0
         for row in data:
             if(row[0] == '###'):
-                if(newtrajectory.get_length() > 1000):
+                if(newtrajectory.get_length() > 5000):
                     trajs.add_trajectory(id,newtrajectory)
                     trajnr = trajnr + 1;
                 if numoftrajstoread is not 0 and trajnr >= numoftrajstoread:
@@ -327,7 +338,7 @@ def readcsvfile(numoftrajstoread=0):
 
 
 
-readcsvfile(3)
+readcsvfile(10)
 trajs.filter_noise()
 #trajs.interpol_points(10)
 trajs.interpol_test(10)
@@ -338,4 +349,4 @@ trajs.interpol_test(10)
 #trajs.calc_distance(trajs.pathdict[keys[0]], trajs.pathdict[keys[1]])
 trajs.plot()
 
-trajs.kmeansclustering(3)
+trajs.kmeansclustering(5)
