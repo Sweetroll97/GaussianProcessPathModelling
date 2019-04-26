@@ -8,7 +8,8 @@ import random as rdm
 import copy
 import string
 from scipy.spatial import distance as dst
-
+from sklearn import gaussian_process
+#from sklearn.gaussian_process import 
 
 class trajectory:
     def __init__(self):
@@ -47,18 +48,24 @@ class trajectories:
     def add_trajectory(self,id, trajectory):
         self.pathdict[id] = trajectory
        
-    def filter_noise(self, treshold = 500):
+    def filter_noise(self, treshold = 500, plotit = False):
         minlength = treshold - 1
         isdead = False
         while minlength < treshold:
             for key in self.pathdict:
+                backup = copy.deepcopy(self.pathdict[key])
                 for point, nextpoint in zip(self.pathdict[key].points,self.pathdict[key].points[1:]):
                     if np.linalg.norm(nextpoint - point) < treshold:
-                        isdead = self.pathdict[key].remove_point(nextpoint[2], nextpoint[0], nextpoint[1])
-                
+                        if set(nextpoint) != set(self.pathdict[key].points[-1]):
+                            isdead = self.pathdict[key].remove_point(nextpoint[2], nextpoint[0], nextpoint[1])
+                        else:
+                            isdead = self.pathdict[key].remove_point(point[2], point[0], point[1])
+                        #if not isdead:
+                        #    self.plotcompare([backup, self.pathdict[key]], [0x00FFFF, 0xFF00FF])
                 if isdead:
                     break
-                    
+                elif plotit is True:    
+                    self.plotcompare([backup, self.pathdict[key]], [0x00FFFF, 0xFF00FF])
             if isdead: 
                 self.pathdict.pop(key)
                 isdead = False
@@ -85,7 +92,7 @@ class trajectories:
         centroids = {}
         for key in rdmkeys:
             centroids[''.join(rdm.choices(string.ascii_uppercase + string.digits, k=5))] = copy.deepcopy(self.pathdict[key])
-        #self.plotwx(centroids)
+        self.plotwx(centroids)
         
         #centroidsold = {}
         ischanging = True
@@ -110,7 +117,7 @@ class trajectories:
             for key in centroids:
                 centroids[key] = self.calc_mean_traj(clusters[key])
             
-            #self.plotwx(centroids)
+            self.plotwx(centroids)
             totdist = 0
             for key in centroidsold:
                 totdist += self.calc_distance(centroids[key], centroidsold[key])
@@ -119,36 +126,23 @@ class trajectories:
                 self.plotclusters(clusters)
                 return clusters
             
-    def calc_mean_traj(self, traj):
-        numofpoints = len(self.pathdict[next(iter(self.pathdict))].points)
-        samplecount = len(traj)
-             
+    def calc_mean_traj(self, keys):
+        samplecount = len(keys)
+        if samplecount == 1:
+            return self.pathdict[keys[0]]
+        elif samplecount == 0:
+            return []
         newmeantraj = trajectory()
-        for i in range(0, numofpoints):
-            xsum = 0
-            ysum = 0
-            tsum = 0
-            
-            for value in traj:
-                xsum += self.pathdict[value].points[i][0]
-                ysum += self.pathdict[value].points[i][1]
-                tsum += self.pathdict[value].points[i][2]
-            newmeantraj.add_point(tsum/samplecount, xsum/samplecount, ysum/samplecount)
+        pointsum = sum([self.pathdict[value].points for value in keys])
+        [newmeantraj.add_point(point[2]/samplecount, point[0]/samplecount, point[1]/samplecount) for point in pointsum]
         return newmeantraj
         
     def calc_distance(self,traj1 , traj2): #calculates an abstract distance beetween two trajectories
         return sum([np.linalg.norm(p1[:2]-p2[:2]) for p1,p2 in zip(traj1.points, traj2.points)])
-            
-    def get_traveled_dist(self,x1,y1,x2,y2):
-        return ((x1-x2)**2+(y1-y2)**2)**.5
-    
-    def get_next_point(self, last_point, curr_point, next_point, movement):
-        direct = ((next_point-last_point)/np.linalg.norm((next_point-last_point)))
-        return curr_point+direct*movement
 
     def get_next_point(self, last_point, next_point, movement): 
         v = next_point-last_point
-        return last_point+v/np.linalg.norm(v)*movement
+        return last_point+(v/(np.linalg.norm(v)))*movement
     
     def interpol_test(self, N):
         for id in tqdm(self.pathdict):
@@ -172,100 +166,93 @@ class trajectories:
                 newtraj.add_point(newpoint[2], newpoint[0], newpoint[1]) 
             newtraj.add_point(self.pathdict[id].points[-1][2], self.pathdict[id].points[-1][0], self.pathdict[id].points[-1][1])
             plt.plot(self.pathdict[id].points[:,0], self.pathdict[id].points[:,1], "b*")
+            plt.plot(self.pathdict[id].points[:,0],self.pathdict[id].points[:,1])
+            plt.plot(newtraj.points[:,0],newtraj.points[:,1])
+            plt.scatter(newtraj.points[:,0],newtraj.points[:,1],color='orange')
+            plt.show()    
             self.pathdict[id] = newtraj
             
-    def interpol_points(self,number_of_observations = 15):
-        
-        #for id in self.pathdict:
-         #   if len(self.pathdict[id].xs) > number_of_observations:
-          #      number_of_observations = len(self.pathdict[id].xs)-1
-
-        for id in tqdm(self.pathdict):
-
-            if(len(self.pathdict[id].xs) == 0):
-                continue            
+    
+            
+   
+            
+    def get_length_to_each_point(self,id):
+        last_object = [self.pathdict[id].points[0]]
+        dist = 0.0
+        li = [0.0]
+        i = 0
+        for point in self.pathdict[id].points:
+            if i != 0:
+                dist += np.linalg.norm(point[:2]-last_object[:2])
+                li.append(dist)
+            last_object = point                
+            i+=1
+        print(li)
+        return li    
+            
+    def interpol_points(self, number_of_segments= 10, plotresult = False):
+        for id in tqdm(self.pathdict):    
             #Calculate total length of the function
             funcion_length = self.pathdict[id].get_length()
-
+    
             #Calculate how much to move at each time step
-            segment_length = funcion_length/(number_of_observations-1) 
-
-            #Creation of temporary lists
-            interp_xs = np.array([], (float))
-            interp_ys = np.array([], (float))    
-
-            #Get num of points 
-            number_of_points = len(self.pathdict[id].xs)-1
+            segment_length = funcion_length/number_of_segments 
             
-            #Set init values
-            i = 0
-            curr_interpol_point = last_point = np.matrix(( self.pathdict[id].xs[i],self.pathdict[id].ys[i]))            
-            global_distance = 0.0
-            point_distance = 0.0
-            rest_segment = 0.0
-            temp_traj = trajectory()
-            temp_traj.add_point(self.pathdict[id].timestamp[0],self.pathdict[id].xs[0],self.pathdict[id].ys[0])
-            while global_distance < funcion_length:
-
-                #Set the last point visited from
-                if i <= number_of_points: #previous -1, why?
-                    last_point = np.matrix(([self.pathdict[id].xs[i],self.pathdict[id].ys[i]]))
-                    next_point = np.matrix(([self.pathdict[id].xs[i+1],self.pathdict[id].ys[i+1]]))
-                    point_distance = np.linalg.norm((next_point-last_point))                    
-                    local_distance = 0.0                    
-                    while local_distance < point_distance and i < number_of_points:
-                        if rest_segment > 0.00000001:
-                            if rest_segment > point_distance:    #if rest is bigger then point distance
-                                if abs(rest_segment-point_distance) < 0.1:
-                                    curr_interpol_point = self.get_next_point(last_point, next_point, rest_segment)     
-                                    temp_traj.add_point(self.pathdict[id].timestamp,curr_interpol_point.item(0),curr_interpol_point.item(1))
-                                    
-                                rest_segment = rest_segment-point_distance
-                                local_distance = point_distance
-                                i+=1
-                            else:      #If rest smaller then point distance
-                                curr_interpol_point = self.get_next_point(last_point, next_point, rest_segment)  
-                                temp_traj.add_point(self.pathdict[id].timestamp,curr_interpol_point.item(0),curr_interpol_point.item(1))
-                                local_distance+= rest_segment
-                                rest_segment = 0.0
-                             #If next step not the first and behind next point   
-                        elif (local_distance+segment_length)> point_distance:
-                            if abs(local_distance+segment_length-point_distance) < 0.1:
-                                curr_interpol_point = self.get_next_point(curr_interpol_point, next_point, segment_length)      
-                                temp_traj.add_point(self.pathdict[id].timestamp,curr_interpol_point.item(0),curr_interpol_point.item(1))
-                            rest_segment = (local_distance+segment_length)-point_distance
-                            local_distance = point_distance
-                            i+=1
-                            # If next step before next point
-                        else:
-                            curr_interpol_point = self.get_next_point(curr_interpol_point, next_point,segment_length)    
-                            temp_traj.add_point(self.pathdict[id].timestamp,curr_interpol_point.item(0),curr_interpol_point.item(1))
-                            local_distance+= segment_length
-
-                global_distance += local_distance
-                if id != '9190802':
-                    plt.plot(self.pathdict[id].xs,self.pathdict[id].ys)
-                    plt.plot(temp_traj.points[:,0],temp_traj.points[:,1])
-                    plt.scatter(temp_traj.points[:,0],temp_traj.points[:,1],color='orange')
-                    plt.show()                
+            #Calculate distance from first point to each other point
+            li = self.get_length_to_each_point(id)
+            
+            temp_traj = trajectory()            
+            total_length = 0.0
+            j = 1
+            for i in range(0,number_of_segments+1):
+                while i*segment_length > li[j]+0.0002:
+                    if  j < len(li)-1:
+                        j+=1
+                last_point = self.pathdict[id].points[j-1]
+                next_point = self.pathdict[id].points[j]
+                rest_segment = i*segment_length-li[j-1]
+                curr_interpol_point = self.get_next_point(last_point, next_point,rest_segment) 
+                temp_traj.add_point(curr_interpol_point[2] ,curr_interpol_point[0],curr_interpol_point[1])
+            if plotresult:
+                self.plotcompare([self.pathdict[id], temp_traj])
+            self.pathdict[id] = temp_traj
                     
-
-#            print(".............................")
-#            
-#            print("Goal:")
-#            print("x: ",self.pathdict[id].xs[num_of_points])
-#            print("x: ",interp_xs[-1])
-#            print("y: ",self.pathdict[id].ys[num_of_points])
-#            print("y: ",interp_ys[-1])            
-#            print(".............................")
-                
-#            plt.plot(self.pathdict[id].xs,self.pathdict[id].ys)
-            print("x: ",self.pathdict[id].xs[-1])
-            print("x: ",temp_traj.xs[-1])
-            print("y: ",self.pathdict[id].ys[-1])
-            print("y: ",temp_traj.ys[-1])            
-            self.pathdict[id].xs = interp_xs
-            self.pathdict[id].ys = interp_ys
+    
+    
+    def generate_guassian_processes(self):
+        params = gaussian_process.kernels.Hyperparameter('theta',float,3,3) #testing stage
+        
+    
+    def plotcompare(self, listoftrajs, colors = []):
+        
+        #= rdm.sample(range(colorrange), len(listoftrajs))
+        count = 0
+        if len(colors) is 0:
+            for i in range(len(listoftrajs)):
+                colors.append('%06X' % rdm.randint(0, 0xEEEEEE))
+        else:
+            for idx,value in enumerate(colors):
+                colors[idx] = '%06X' % value
+       
+        for traj in listoftrajs:     
+            print(".............................")    
+            print("Goal:")
+            print("x: ",traj.points[-1,0])
+           #print("x: ",traj.points[-1,0])
+            print("y: ",traj.points[-1,1])
+           # print("y: ",temp_traj.points[-1,1])            
+            print(".............................")
+            paint = (colors[count])
+            count += 1
+            
+            plt.plot(traj.points[:,0],traj.points[:,1], '#'+paint)
+            plt.scatter(traj.points[:,0],traj.points[:,1], color='#'+paint)
+            
+           # plt.plot(temp_traj.points[:,0],temp_traj.points[:,1])
+           # plt.scatter(temp_traj.points[:,0],temp_traj.points[:,1],color='orange')
+        plt.show()
+        colors.clear()
+        
     def plotclusters(self, clusters):
         plt.axis([-50000,50000.0,-50000.0,50000.0]) # xmin, xmax, ymin, ymax
         
@@ -274,63 +261,20 @@ class trajectories:
         colors = rdm.sample(range(colorrange), numofclusters)
         count = 0
         colors = []
-        
+       
         for i in range(10):
             colors.append('%06X' % rdm.randint(0, 0xFFFFFF))
-            
+           
         for element in clusters:
             color = (colors[count])
-            #color = cm.hot(float(colors[count])/colorrange)
-            #color = cm.autumn(float(colors[count])/colorrange)
+           #color = cm.hot(float(colors[count])/colorrange)
+           #color = cm.autumn(float(colors[count])/colorrange)
             for key in clusters[element]:
                 plt.plot(self.pathdict[key].xs, self.pathdict[key].ys, '#'+color)
             count += 1
-            plt.show()      
-            
+        plt.show()         
+    
     def plotwx(self, x):
-    def interpol_points2(self):
-        number_of_observations = 10
-        
-        #for id in self.pathdict:
-         #   if len(self.pathdict[id].xs) > number_of_observations:
-          #      number_of_observations = len(self.pathdict[id].xs)-1
-
-        for id in tqdm(self.pathdict):
-
-            if(len(self.pathdict[id].xs) == 0):
-                continue            
-            #Calculate total length of the function
-            funcion_length = self.get_function_length(self.pathdict[id].xs, self.pathdict[id].ys)
-
-            #Calculate how much to move at each time step
-            segment_length = funcion_length/number_of_observations 
-            li = self.get_length_to_each_point(id)
-            temp_traj = trajectory()            
-            total_length = 0.0
-            j = 1
-            for i in range(0,number_of_observations+1):
-                while i*segment_length > li[j]+0.0002:
-                    if  j < len(li)-1:
-                        j+=1
-                last_point = self.pathdict[id].points[j-1]
-                next_point = self.pathdict[id].points[j]
-                rest_segment = i*segment_length-li[j-1]
-                curr_interpol_point = self.get_next_point(last_point, last_point, next_point,rest_segment) 
-                temp_traj.add_point(self.pathdict[id].timestamp,curr_interpol_point.item(0),curr_interpol_point.item(1))
-            print(".............................")
-            
-            print("Goal:")
-            print("x: ",self.pathdict[id].xs[-1])
-            print("x: ",temp_traj.xs[-1])
-            print("y: ",self.pathdict[id].ys[-1])
-            print("y: ",temp_traj.ys[-1])            
-            print(".............................")
-            plt.plot(self.pathdict[id].xs,self.pathdict[id].ys)
-            plt.plot(temp_traj.points[:,0],temp_traj.points[:,1])
-            plt.scatter(temp_traj.points[:,0],temp_traj.points[:,1],color='orange')
-            plt.show()              
-                       
-        
         for id in x:
             plt.plot(x[id].xs, x[id].ys, "*")
         
@@ -382,13 +326,13 @@ def readcsvfile(numoftrajstoread=0):
 
 readcsvfile(10)
 trajs.filter_noise()
-#trajs.interpol_points(10)
-trajs.interpol_test(10)
+trajs.interpol_points(10)
+#trajs.interpol_test(10)
 
 #keys = []
 #for key in trajs.pathdict:
 #    keys.append(key)    
 #trajs.calc_distance(trajs.pathdict[keys[0]], trajs.pathdict[keys[1]])
-trajs.plot()
+#trajs.plot()
 
-trajs.kmeansclustering(5)
+trajs.kmeansclustering(3)
