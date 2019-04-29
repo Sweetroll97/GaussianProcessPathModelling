@@ -25,18 +25,19 @@ class trajectory:
         self.points = np.append(self.points, [[x,y,time]], axis=0)
         self.timestamp = np.append(self.timestamp,time)
     def remove_point(self, time, x,y):
-        #self.xs = np.delete(self.xs,np.where(self.xs == x))
-        #self.ys = np.delete(self.ys,np.where(self.ys == y))
-        #self.timestamp = np.delete(self.timestamp,np.where(self.timestamp == time))
         self.points = np.delete(self.points, np.where(self.points == [[x,y,time]])[0], axis=0)
         if len(self.points) < 3: return True
         else: return False
         
     def get_length(self):
         return sum([np.linalg.norm(p1[:2]-p2[:2]) for p1,p2 in zip(self.points, self.points[1:])])
-        
-        
-        
+    def get_lengths(self):
+        return [np.linalg.norm(p1-p2) for p1,p2 in zip(self.points, self.points[1:])]
+    def get_lengths_from_first_point(self):
+        lengths = self.get_lengths()
+        for idx,value in enumerate(lengths[:-1]):
+            lengths[idx+1] = lengths[idx] + lengths[idx+1]
+        return lengths
     def get_trajectory():     
         print("not implemented")
         
@@ -131,7 +132,7 @@ class trajectories:
         if samplecount == 1:
             return self.pathdict[keys[0]]
         elif samplecount == 0:
-            return []
+            raise ValueError('empty trajectory list')
         newmeantraj = trajectory()
         pointsum = sum([self.pathdict[value].points for value in keys])
         [newmeantraj.add_point(point[2]/samplecount, point[0]/samplecount, point[1]/samplecount) for point in pointsum]
@@ -143,82 +144,40 @@ class trajectories:
     def get_next_point(self, last_point, next_point, movement): 
         v = next_point-last_point
         return last_point+(v/(np.linalg.norm(v)))*movement
-    
-    def interpol_test(self, N):
-        for id in tqdm(self.pathdict):
-            WL = self.pathdict[id].get_length()/(N-1)
-            L = [np.linalg.norm(p1-p2) for p1,p2 in zip(self.pathdict[id].points, self.pathdict[id].points[1:])]
-            newtraj = trajectory();
-            newtraj.add_point(self.pathdict[id].points[0][2], self.pathdict[id].points[0][0], self.pathdict[id].points[0][1])
-            pointofinterest=0
-            sumofpassedpoints = 0
-            disttonextpoint = copy.deepcopy(L)
             
-            for i in range(1, N-1):
-                
-                while WL*i > disttonextpoint[0]:
-                    pointofinterest+=1
-                    temp = disttonextpoint.pop(0)
-                    disttonextpoint[0] += temp
-                    sumofpassedpoints = sum(L[0:pointofinterest])
-                
-                newpoint = self.get_next_point(self.pathdict[id].points[pointofinterest], self.pathdict[id].points[pointofinterest+1], WL*i-sumofpassedpoints)
-                newtraj.add_point(newpoint[2], newpoint[0], newpoint[1]) 
-            newtraj.add_point(self.pathdict[id].points[-1][2], self.pathdict[id].points[-1][0], self.pathdict[id].points[-1][1])
-            plt.plot(self.pathdict[id].points[:,0], self.pathdict[id].points[:,1], "b*")
-            plt.plot(self.pathdict[id].points[:,0],self.pathdict[id].points[:,1])
-            plt.plot(newtraj.points[:,0],newtraj.points[:,1])
-            plt.scatter(newtraj.points[:,0],newtraj.points[:,1],color='orange')
-            plt.show()    
-            self.pathdict[id] = newtraj
-            
-    
-            
-   
-            
-    def get_length_to_each_point(self,id):
-        last_object = [self.pathdict[id].points[0]]
-        dist = 0.0
-        li = [0.0]
-        i = 0
-        for point in self.pathdict[id].points:
-            if i != 0:
-                dist += np.linalg.norm(point[:2]-last_object[:2])
-                li.append(dist)
-            last_object = point                
-            i+=1
-        print(li)
-        return li    
-            
-    def interpol_points(self, number_of_segments= 10, plotresult = False):
+    def interpol_points(self, number_of_points = 10, plotresult = False):
         for id in tqdm(self.pathdict):    
             #Calculate total length of the function
-            funcion_length = self.pathdict[id].get_length()
+            function_length = self.pathdict[id].get_length()
     
             #Calculate how much to move at each time step
-            segment_length = funcion_length/number_of_segments 
+            segment_length = function_length/(number_of_points-1) 
             
             #Calculate distance from first point to each other point
-            li = self.get_length_to_each_point(id)
+            li = self.pathdict[id].get_lengths_from_first_point()
             
             temp_traj = trajectory()            
-            total_length = 0.0
-            j = 1
-            for i in range(0,number_of_segments+1):
-                while i*segment_length > li[j]+0.0002:
-                    if  j < len(li)-1:
+            temp_traj.add_point(self.pathdict[id].points[0,2], self.pathdict[id].points[0,0],self.pathdict[id].points[0,1])
+            j = 0
+            passedlength = 0
+            for i in range(1,number_of_points-1):
+                while i*segment_length > li[j]:
+                    if  j < len(li):
+                        passedlength = li[j]
                         j+=1
-                last_point = self.pathdict[id].points[j-1]
-                next_point = self.pathdict[id].points[j]
-                rest_segment = i*segment_length-li[j-1]
+                    else: raise ValueError('Interpolation error')
+                last_point = self.pathdict[id].points[j]
+                next_point = self.pathdict[id].points[j+1]
+                rest_segment = i*segment_length-passedlength
+                
                 curr_interpol_point = self.get_next_point(last_point, next_point,rest_segment) 
                 temp_traj.add_point(curr_interpol_point[2] ,curr_interpol_point[0],curr_interpol_point[1])
+            temp_traj.add_point(self.pathdict[id].points[-1,2], self.pathdict[id].points[-1,0],self.pathdict[id].points[-1,1])
+            
             if plotresult:
-                self.plotcompare([self.pathdict[id], temp_traj])
+                self.plotcompare([self.pathdict[id], temp_traj], [0xFF0000, 0x00FF00])
             self.pathdict[id] = temp_traj
                     
-    
-    
     def generate_guassian_processes(self):
         params = gaussian_process.kernels.Hyperparameter('theta',float,3,3) #testing stage
         
@@ -329,10 +288,8 @@ trajs.filter_noise()
 trajs.interpol_points(10)
 #trajs.interpol_test(10)
 
-#keys = []
-#for key in trajs.pathdict:
-#    keys.append(key)    
-#trajs.calc_distance(trajs.pathdict[keys[0]], trajs.pathdict[keys[1]])
 #trajs.plot()
 
 trajs.kmeansclustering(3)
+#trajs.pathdict[next(iter(trajs.pathdict))]. #test row for a n trajectory
+#trajs.calc_mean_traj([])
