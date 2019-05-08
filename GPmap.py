@@ -1,15 +1,50 @@
 import numpy as np
 import statistics as ss
 import pandas as ps
+import itertools
 import csv
+import math
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 from tqdm import tqdm
 import random as rdm
 import copy
 import string
 from scipy.spatial import distance as dst
 from sklearn import gaussian_process
+import sklearn.mixture as mixture
 #from sklearn.gaussian_process import 
+from matplotlib.colors import LogNorm
+color_iter = itertools.cycle(['navy', 'c', 'cornflowerblue', 'gold',
+                              'darkorange'])
+
+  
+def plot_results(X, Y_, means, covariances, index, title):
+    splot = plt.subplot(2, 1, 1 + index)
+    col = color_iter
+    for i, (mean, covar, color) in enumerate(zip(
+            means, covariances, color_iter)):
+        v, w = np.linalg.eigh(covar)
+        v = 2. * np.sqrt(2.) * np.sqrt(v)
+        u = w[0] / np.linalg.norm(w[0])
+        # as the DP will not use every component it has access to
+        # unless it needs it, we shouldn't plot the redundant
+        # components.
+        if not np.any(Y_ == i):
+            continue
+        plt.scatter(X[Y_ == i, 0], X[Y_ == i, 1], .8, color=color)
+
+        # Plot an ellipse to show the Gaussian component
+        angle = np.arctan(u[1] / u[0])
+        angle = 180. * angle / np.pi  # convert to degrees
+        ell = mpl.patches.Ellipse(mean, v[0], v[1], 180. + angle, color=color)
+        ell.set_clip_box(splot.bbox)
+        ell.set_alpha(0.5)
+        splot.add_artist(ell)
+
+    plt.xticks(())
+    plt.yticks(())
+    plt.title(title)
 
 class trajectory:
     def __init__(self):
@@ -93,7 +128,7 @@ class trajectories:
         centroids = {}
         for key in rdmkeys:
             centroids[''.join(rdm.choices(string.ascii_uppercase + string.digits, k=5))] = copy.deepcopy(self.pathdict[key])
-        self.plotwx(centroids)
+        #self.plotwx(centroids)
         
         #centroidsold = {}
         ischanging = True
@@ -118,14 +153,15 @@ class trajectories:
             for key in centroids:
                 centroids[key] = self.calc_mean_traj(clusters[key])
             
-            self.plotwx(centroids)
+            #self.plotwx(centroids)
             totdist = 0
             for key in centroidsold:
                 totdist += self.calc_distance(centroids[key], centroidsold[key])
             if totdist < 5:
                 ischanging = False
-                self.plotclusters(clusters)
+                #self.plotclusters(clusters)
                 return clusters
+        
             
     def calc_mean_traj(self, keys):
         samplecount = len(keys)
@@ -248,13 +284,95 @@ class trajectories:
             plt.plot(self.pathdict[id].points[:,0], self.pathdict[id].points[:,1])
             
         plt.show();
+        
+        
+class GaussianMixtureModel():
+        
+
+    def __init__(self, trajs,K,sigma):
+        self.trajs = trajectories()
+        self.trajs = copy.deepcopy(trajs)
+        self.T = len(self.trajs.pathdict[next(iter(self.trajs.pathdict.items()))[0]].points)
+        self.K = K
+        self.beta = self.T/self.K
+        self.sigma = sigma
+        self.EM_clusters = {}
+        self.set_init_em_centroid_points()
+        
+    def set_init_em_centroid_points(self):
+        curr_list = rdm.sample(list(self.trajs.pathdict.keys()),self.K)
+        cluster_name = "cluster "
+        for i, obj in enumerate(curr_list):
+            number = str((i+1))
+            self.EM_clusters[cluster_name+number] = [obj]
+        trajs = rdm.sample(list(self.trajs.pathdict.keys()),self.K)
+        for traj in trajs:
+            self.EM_clusters[cluster_name+str(1)].append(traj)
+        self.plot_cluster()
+        self.get_mean_cluster_i("cluster 1")    
+        
+        
+        
+    def plot_cluster(self,key= "##"):
+        if key == "##": #Print all trajectories
+            for id in self.EM_clusters:
+                for key in self.EM_clusters[id]:
+                    a = self.trajs.pathdict[key].points
+                    plt.plot(a[:][0],a[:][1])
+        else: #Print specific trajectory
+            for trajecory in self.trajectories.pathdict[key]:
+                plt.plot(trajecory.points[:0][-1],trajecory.points[:1][-1]) 
+        plt.show()
+        
+       
+        
+    def update_em(self, index, traj):
+        return 0
+        
+        
+    def get_mean_cluster_i(self,key):
+        keys = self.EM_clusters[key]
+        mean_trajectory = []
+        sum_from_points = [0,0,0]
+        for i in range(0,self.T):
+            for key in keys:
+                sum_from_points+= self.trajs.pathdict[key].points[i]
+                a = i%(self.beta)
+            if i%(self.beta) == (self.beta - 1):
+                mean_trajectory.append(sum_from_points/(len(keys)*self.K))
+                sum_from_points = [0,0,0]
+        
+        return mean_trajectory
+                
+            
+        
+    def GMM(self):
+        #initialize start state
+        #while less than treashold:
+            #calculate mean
+            #update mean to each cluster
+        mean1 = self.get_mean_cluster_i("cluster 1")
+        print(mean1)
+        mean2 = self.get_mean_cluster_i("cluster 2")
+        print(mean2)
+        mean3 = self.get_mean_cluster_i("cluster 3")
+        print(mean3)        
+        
+            
+            
+
+        
+            
+            
+            
+            
 
 trajs = trajectories()
     
 def readcsvfile(numoftrajstoread=0):
     global trajs;
     
-    with open('testfile.csv') as data:
+    with open('testfile1.csv') as data:
         data = csv.reader(data, delimiter=',')
         trajnr = 0
         
@@ -262,7 +380,7 @@ def readcsvfile(numoftrajstoread=0):
         id = 0
         for row in data:
             if(row[0] == '###'):
-                if(newtrajectory.get_length() > 5000):
+                if(newtrajectory.get_length() > 0):
                     trajs.add_trajectory(id,newtrajectory)
                     trajnr = trajnr + 1;
                 if numoftrajstoread is not 0 and trajnr >= numoftrajstoread:
@@ -283,13 +401,31 @@ def readcsvfile(numoftrajstoread=0):
 
 
 
-readcsvfile(10)
-trajs.filter_noise()
+readcsvfile(19)
+#trajs.filter_noise()
 trajs.interpol_points(10)
+#traj1 = trajectory()
+#traj1.add_point(0,2.1,8.0)
+#traj2 = trajectory()
+#traj2.add_point(0,2.5,10)
+#traj3 = trajectory()
+#traj3.add_point(0,3.6,12)
+#traj4 = trajectory()
+#traj4.add_point(0,4,14)
+#
+#clus = {}
+#clus["cluster_1"] = traj1
+#clus["cluster_2"] = traj2
+#clus["cluster_3"] = traj3
+#clus["cluster_4"] = traj4
+    
 #trajs.interpol_test(10)
 
 #trajs.plot()
-
-trajs.kmeansclustering(3)
+K = 5
+#test = trajs.kmeansclustering(25)
+sigma = 1700
+GMM = GaussianMixtureModel(trajs,K,sigma)
+GMM.GMM()
 #trajs.pathdict[next(iter(trajs.pathdict))]. #test row for a n trajectory
 #trajs.calc_mean_traj([])
