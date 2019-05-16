@@ -13,6 +13,7 @@ from tqdm import tqdm
 #import string
 #from scipy.spatial import distance as dst
 from sklearn import gaussian_process as gp
+#from sklearn.cluster import KMeans
 #from sklearn.gaussian_process import
 
 class trajectory:
@@ -29,10 +30,13 @@ class trajectory:
         """remove point as x,y, timestamp if this results to a empty trajectory return True"""
         self.points = np.delete(self.points, np.where(self.points == [[x, y, time]])[0], axis=0)
         return bool(len(self.points) < 3)
-    
+
     def calc_distance(self, traj):
         """calculates an abstract distance beetween self and a trajectory"""
+        if not traj:
+            return None
         return sum([np.linalg.norm(p1[:2]-p2[:2]) for p1, p2 in zip(self.points, traj.points)])
+    #Frechet distance #avg distance
 
     def get_length(self):
         """returns the function length with the sum of all lengths beetween the points"""
@@ -65,18 +69,24 @@ class trajectories:
         to pathdict unordered dictionary
         """
         self.pathdict[_id] = _trajectory
+    def normalize_timestamps(self):
+        """shifts all trajectories's timestamps so they all start at 0"""
+        for _, traj in self.pathdict.items():
+            traj.normailise_timestamps()
 
     def filter_noise(self, threshold=500, plotit=False):
         """Rough filter that filters all points that is closer than threshold"""
-        minlength = threshold - 1
+        minlength = threshold - 1 #just to start loop
         isdead = False
+        key = None
         while minlength < threshold:
             for key in tqdm(self.pathdict, total=len(self.pathdict.keys())):
                 backup = copy.deepcopy(self.pathdict[key])
                 for point, nextpoint in zip(self.pathdict[key].points,
                                             self.pathdict[key].points[1:]):
-                    if np.linalg.norm(nextpoint - point) < threshold:
-                        if set(nextpoint) != set(self.pathdict[key].points[-1]):
+                    if np.linalg.norm(nextpoint[:2] - point[:2]) < threshold:
+                        if self.pathdict[key].points.size > 0 and \
+                            set(nextpoint) != set(self.pathdict[key].points[-1]):
                             isdead = self.pathdict[key].remove_point(
                                 nextpoint[2], nextpoint[0], nextpoint[1])
                         else:
@@ -89,39 +99,69 @@ class trajectories:
                     break
                 elif plotit is True:
                     self.plotcompare([backup, self.pathdict[key]], [0x00FFFF, 0xFF00FF])
-            if isdead:
+            if isdead and key:
                 self.pathdict.pop(key)
                 isdead = False
             else:
                 minlength = min([np.linalg.norm(p1-p2) for p1, p2 in
                                  zip(self.pathdict[key].points, self.pathdict[key].points[1:])])
 
-    def kmeansclustering(self, k, treshold=200000, plotit=False):
-        """generates k clusters with centroids that is further away than threshold"""
-        #Generate k centroids
+    def elbow_method_for_k(self, initk, maxk, threshold=200000):
+        """Decide k for the clustering"""
+        percentage_variance = []
+        #datavariance = sum([self.pathdict[key].calc_distance(self.pathdict[nextkey]) for
+        #                    key, nextkey in zip(list(self.pathdict.keys()), list(self.pathdict.keys())[1:])])/len(self.pathdict)
+        #datavariance = self.calc_mean_traj(self.pathdict.keys())
+        for i in tqdm(range(initk, maxk-3)):
+            clusters, threshold = self.kmeansclustering(i, threshold)
+            clustercentroids = [self.calc_mean_traj(clusters[cluster]) for cluster in clusters]
+            clustervariance = sum([traj.calc_distance(nexttraj) for traj, nexttraj in zip(clustercentroids, clustercentroids[1:]) if traj and nexttraj])/len(clustercentroids)
+            #percentage_variance.append((datavariance/clustervariance))
+            newlist = []
+            #for _, val in clusters.items():
+                #maxval = [self.pathdict[key].calc_nex]
+            anothervariance = max([max([self.pathdict[key].calc_distance(self.pathdict[nextkey]) for key,nextkey in zip(keylist, keylist[1:])], default=0) for _, keylist in clusters.items()], default=0)
+            percentage_variance.append((clustervariance/i))
+        #plt.figure(figsize=(2,1))
+        plt.xticks(range(len(percentage_variance)))
+        plt.plot(range(initk, initk+len(percentage_variance)), percentage_variance)
+        print(percentage_variance)
+
+    def generate_centroids(self, k, threshold=200000, plotit=False):
+        """Generate k centroids with closest distance threshold"""
         rdmkeys = rdm.sample(list(self.pathdict.keys()), k)
 
         #fix for centroids that is to close
-        istoclose = True
-        while istoclose:
+        counter = 0
+        while True:
             istoclose = False
             for key1, key2 in tqdm(zip(rdmkeys, rdmkeys[1:]), total=len(rdmkeys)):
-                if self.pathdict[key1].calc_distance(self.pathdict[key2]) < treshold:
+                if self.pathdict[key1].calc_distance(self.pathdict[key2]) < threshold:
+                    if counter > 100:
+                        counter = 0
+                        threshold -= 100
+                        threshold = max(threshold, 0)
+
+                    counter += 1
                     istoclose = True
                     rdmkeys.remove(key1)
-                    treshold -= 100
-                    if treshold < 0:
-                        treshold = 0
                     rdmkeys.append(rdm.choice([newkey for newkey in list
                                                (self.pathdict.keys()) if newkey not in rdmkeys]))
+                    break
+            if not istoclose:
+                break
 
         centroids = {}
         for idx, key in enumerate(tqdm(rdmkeys)):
             centroids["cluster_"+str(idx+1)] = copy.deepcopy(self.pathdict[key])
         if plotit:
             self.plotwx(centroids)
+        return centroids
 
-        #centroidsold = {}
+    def kmeansclustering(self, k, threshold=200000, acceptible_distance=5, plotit=False):
+        """generates k clusters with centroids that is further away than threshold"""
+        centroids = self.generate_centroids(k, threshold, plotit)
+
         ischanging = True
         while ischanging:
             centroidsold = copy.deepcopy(centroids)
@@ -131,8 +171,9 @@ class trajectories:
                 clusters[key] = []
 
             for pathkey in tqdm(self.pathdict):
-                mindistance = centroids[next(iter(centroids))].calc_distance(self.pathdict[pathkey])
                 minkey = next(iter(centroids.items()))[0]
+                mindistance = centroids[minkey].calc_distance(self.pathdict[pathkey])
+
                 for key in centroids:
                     newdistance = centroids[key].calc_distance(self.pathdict[pathkey])
                     if  newdistance < mindistance:
@@ -142,27 +183,39 @@ class trajectories:
 
             #reassign centroids with means of respective cluster
             for key in tqdm(centroids):
-                centroids[key] = self.calc_mean_traj(clusters[key])
+                if clusters[key]:
+                    centroids[key] = self.calc_mean_traj(clusters[key])
+                else:
+                    tqdm.external_write_mode()
+                    print("error")
             if plotit:
                 self.plotwx(centroids)
             totdist = 0
             for key in centroidsold:
-                totdist += centroids[key].calc_distance(centroidsold[key])
-            if totdist < 5:
+                if centroidsold[key]:
+                    totdist += centroids[key].calc_distance(centroidsold[key])
+            if totdist < acceptible_distance:
                 ischanging = False
                 if plotit:
                     self.plotclusters(clusters)
-                return clusters
+                return clusters, threshold
 
     def calc_mean_traj(self, keys):
         """returns a mean trajectory given keys from pathdict"""
+        if not keys:
+            return None
+
         samplecount = len(keys)
         #if samplecount == 0:
         #    raise ValueError('empty trajectory list')
         if samplecount == 1:
             return self.pathdict[keys[0]]
         newmeantraj = trajectory()
+
         pointsum = sum([self.pathdict[value].points for value in keys])
+        #if isinstance(pointsum, int):
+        #    raise ValueError("empty key list")
+
         for point in pointsum:
             newmeantraj.add_point(point/samplecount)
         return newmeantraj
@@ -209,213 +262,144 @@ class trajectories:
     def generate_guassian_processes(self, clusters):
         """generates two gaussian proccesses for x and y for each cluster"""
         #params = gp.kernels.Hyperparameter('theta',float,3,3) #testing stage
+        self.normalize_timestamps()
         for cluster, value in clusters.items():
             if len(cluster) > 1:
-                #extracl all points from a cluster
-                #points = np.array([point for sublist in [self.pathdict[key].points for key in clusters[cluster]] for point in sublist])
-                points = np.empty([0,len(value),3])
-                for i in range(0, len(self.pathdict[value[0]].points)):
-                    temp = np.empty([0,3])
-                    for key in value:
-                        temp = np.append(temp, [self.pathdict[key].points[i,:]], axis=0)
-                    #test = np.atleast_2d([temp])
-                    points = np.append(points, np.atleast_2d([temp]), axis=0)
+               
 
-                #xs = sorted(points[:,0])
-                #ys = sorted(points[:,1])
-                
-                #points = np.array([self.pathdict[key].points for key in value])
-                [self.pathdict[key].normailise_timestamps() for key in value]
-                #xs = np.array([self.pathdict[key].points[:,0:3:2] for key in value])#.T.reshape(-1,1)
-                #ys = np.array([self.pathdict[key].points[:,1:3] for key in value])#.T.reshape(-1,1)
-                
                 pointsxt = np.empty([0,2])
                 pointsyt = np.empty([0,2])
                 
                 for key in value:
                     pointsxt = np.append(pointsxt,self.pathdict[key].points[:,0:3:2], axis=0)
                     pointsyt = np.append(pointsyt,self.pathdict[key].points[:,1:3], axis=0)
-                
+                    
+               
+                    
+
                 xs = pointsxt[:,0]
-                ys = pointsyt[:,0]
+                #print(xs)
+                
+                #for i in range(0, 23):
+                #    xs[i] += rdm.random()*5000
+                
+                #for i, _ in enumerate(xs):
+                #    xs[i] += rdm.random()*20000
+                #print(xs)
+                #T, X coords
+
+                #ys = pointsyt[:,0]
                 
                 tx = pointsxt[:,1]
-                ty = pointsyt[:,1]
+                #ty = pointsyt[:,1]
                 
-                #xs = points[:,:,0]
-                #ys = points[:,:,1] 
-                
-                #E = self.calc_mean_traj(clusters[cluster]) #expected values is E(X) calculated as the mean function
-                
+                #tx = np.tile(np.linspace(0, len(self.pathdict[value[0]].points)-1,len(self.pathdict[value[0]].points)),len(value))
+
                 lengthscale = 1.0
-                n = 10
-                
-                #meanfuncs = trajectories()
-                #meanfuncs.pathdict["1"] = trajectory()
-                #meanfuncs.pathdict["1"].add_point([0,0,0])
-                #meanfuncs.pathdict["1"].add_point([5,2,0])
-                #meanfuncs.pathdict["1"].add_point([3,3,0])
-                
-                #meanfuncs.pathdict["2"] = trajectory()
-                #meanfuncs.pathdict["2"].add_point([0, 0.5,0])
-                #meanfuncs.pathdict["2"].add_point([5, 2.5,0])
-                #meanfuncs.pathdict["2"].add_point([3, 2.5,0])
-                
-                #meanE = meanfuncs.calc_mean_traj(["1", "2"])
-                
-                theta_x,theta_y = (1.0,1.0)
-                
-                kx = theta_x*gp.kernels.RBF(lengthscale,(1e-2,1e2)) + gp.kernels.WhiteKernel(1.0)
+                noise = 1.0
+                n = 20
+                constant = 2
+
+                theta_x,theta_y = (316.0,1.0)
+
+                kx = theta_x*gp.kernels.RBF(lengthscale,(10.0,1e5)) + gp.kernels.WhiteKernel(noise, (1e-5,1.0)) + constant
                 print("x kernel before:", kx)
-                process_x = gp.GaussianProcessRegressor(kernel=kx, normalize_y=True, n_restarts_optimizer=n)
+                process_x = gp.GaussianProcessRegressor(kernel=kx, n_restarts_optimizer=n, normalize_y=False, alpha=0)
                 
-                ky = theta_y*gp.kernels.RBF(lengthscale,(1e-2,1e2)) + gp.kernels.WhiteKernel(1.0)
-                print("y kernel before:", ky)
-                process_y = gp.GaussianProcessRegressor(kernel=ky, normalize_y=True, n_restarts_optimizer=n)
-                
-                #seq = np.linspace(1, 1000, len(points))
-                #seq_x = np.atleast_2d(np.linspace(0,  10, 1000)).T
-                #process_x.fit(points[:,0].reshape(-1,1), seq_x.T)
-                #test = np.interp(points[:,0], E.points[:,0], E.points[:,1])
-                #process_x.fit(points[:,0].reshape(-1,1), test.T)
-                #process_x.fit(E.points[:,0].reshape(-1,1), points[:,1].T)
-                #process_x.fit(seq_x, points[:,0].T)
-                #process_x.fit(np.atleast_2d(E.points[:,0]).T, points[:,0].T)
-               
-                #seq_x = np.atleast_2d(np.linspace(min(points[:,0]),  max(points[:,0]), len(points))).reshape(-1,1)
-                #seq_x = np.atleast_2d(np.linspace(min(xs.flatten()),  max(xs.flatten()), len(xs))).reshape(-1,1)
-                #seq_x = np.atleast_2d(np.linspace(0,  10, len(xs))).reshape(-1,1)
-                #seq_x = np.atleast_2d(np.linspace(1,  10, len(points))).reshape(-1,1)
-                #process_x.fit(seq_x, points[:,0])
-                #process_x.fit(seq_x, xs)
-                #process_x.fit(xs, seq_x)
-                #process_x.fit(seq_x, xs)
+                #ky = theta_y*gp.kernels.RBF(lengthscale) + gp.kernels.WhiteKernel(noise)
+                #print("y kernel before:", ky)
+                #process_y = gp.GaussianProcessRegressor(kernel=ky, n_restarts_optimizer=n, normalize_y=True, alpha=0)
+
                 process_x.fit(tx.reshape(-1,1), xs.reshape(-1,1))
-                #process_x.fit(E.points[:,0].reshape(-1,1), xs)
-                #process_x.fit(xs, E.points[:,0])
-                #for key,nextkey in zip(value, value[1:]):
-                #    process_x.fit(self.pathdict[key].points[:,0].reshape(-1,1), self.pathdict[nextkey].points[:,0].reshape(-1,1))
-                #[process_x.fit(self.pathdict[key].points[:,0].reshape(-1,1), self.pathdict[nextkey].points[:,0].reshape(-1,1)) for key, nextkey in zip(value, value[1:])]
+
                 print("")
                 print("x kernel after:", process_x.kernel_)
-               
-                #seq = np.linspace(1, 1000, len(points))
-                #seq = np.linspace(min(points[:,1]),  max(points[:,1]), len(points))
-                #process_y.fit(points[:,1].reshape(-1,1), seq.reshape(-1,1))
-                #process_y.fit(points[:,1].reshape(-1,1), points[:,0].reshape(-1,1))
 
-                #seq_y = np.atleast_2d(np.linspace(min(points[:,1]),  max(points[:,1]), len(points))).reshape(-1,1)
-                #seq_y = np.atleast_2d(np.linspace(min(ys.flatten()),  max(ys.flatten()), len(ys))).reshape(-1,1)
-                #seq_y = np.atleast_2d(np.linspace(0,10,len(ys))).reshape(-1,1)
-                #seq_y = np.atleast_2d(np.linspace(1,  10, len(points))).reshape(-1,1)
-                #process_y.fit(seq_y,points[:,1])
-                #process_y.fit(ys, seq_y)
-                #process_y.fit(seq_y, ys)
-                process_y.fit(ty.reshape(-1,1), ys.reshape(-1,1))
-                #process_y.fit(E.points[:,1].reshape(-1,1), ys)
-                #process_y.fit(ys, E.points[:,1])
-                #for key,nextkey in zip(value, value[1:]):
-                #    process_y.fit(self.pathdict[key].points[:,1].reshape(-1,1), self.pathdict[nextkey].points[:,1].reshape(-1,1))
-                #[process_y.fit(self.pathdict[key].points[:,1].reshape(-1,1), self.pathdict[nextkey].points[:,1].reshape(-1,1)) for key, nextkey in zip(cluster, cluster[1:])]
-                print("y kernel after:", process_y.kernel_)
-                print("")
-                
-               
-                #predict_x,std_x = process_x.predict(xs, return_std=True);
-                #predict_y,std_y = process_y.predict(ys, return_std=True);
+                #process_y.fit(ty.reshape(-1,1), ys.reshape(-1,1))
 
-                #predict_x,std_x = process_x.predict(E.points[:,0].reshape(-1,1), return_std=True);
-                #predict_y,std_y = process_y.predict(E.points[:,1].reshape(-1,1), return_std=True);
+                #print("y kernel after:", process_y.kernel_)
+                #print("")
+                    
+                mt = self.calc_mean_traj(value).points[:,2].reshape(-1,1)
 
-                predict_x,std_x = process_x.predict(tx.reshape(-1,1), return_std=True);
-                predict_y,std_y = process_y.predict(ty.reshape(-1,1), return_std=True);
+                seqx = np.sort(tx).reshape(-1,1)[len(value)-1:]
+                seqx = np.atleast_2d(np.linspace(min(tx), max(tx), len(tx))).reshape(-1,1)
+                #seqx = np.atleast_2d(self.calc_mean_traj(value).points[:,2]).reshape(-1,1)
+                predict_x,std_x = process_x.predict(seqx, return_std=True)
+                #predict_y,std_y = process_y.predict(ty.reshape(-1,1), return_std=True)
+                #print(std_x)
+                #plt.imshow(std_x)
                 
-                #xepoints = [cov_x+ex for ex in E.points[:,0]]
-                #yepoints = [cov_y+ey for ey in E.points[:,1]]
                 
-                #nxepoints = [cov_x-ex for ex in E.points[:,0]]
-                #nyepoints = [cov_y-ey for ey in E.points[:,1]]
+                for x,y in zip(np.split(tx,len(value)), np.split(xs, len(value))):
+                    plt.plot(x, y, c='black')
+                
+                for _ in range(10):
+                    test = process_x.sample_y(seqx)
+                    plt.plot(seqx,test.squeeze())
+                plt.scatter(seqx, predict_x, c='m')
+                
+                #print(predict_x)
+                #print("")
+                #print(tx)
+                #print("")
+                #print(std_x)
+                
+                plt.figure()
+                plt.title(cluster)
+                
+                for idx,(x,y) in enumerate(zip(np.split(tx,len(value)), np.split(xs, len(value)))):
+                    plt.plot(x, y, label='x\'s traj: '+str(idx+1))
+                    
+                #plt.plot(tx, xs, 'm', label='$x-values$')
+                #plt.plot(ty, ys, 'c', label='$y-values$')
 
-                #test = process_x.kernel_.diag(points[:,0])
-                
-                fig = plt.figure()
-                #plt.plot(seq_x[:,0], points[:,0], 'm', label='x-values')
-                #xval = plt.plot(seq_x[:,0], xs, 'm', label='$x-values$')
-                #plt.plot(seq_y[:,0], points[:,1], 'c', label='y-values')
-                #yval = plt.plot(seq_y[:,0], ys, 'c', label='$y-values$')
-                
-                plt.plot(tx, xs, 'm', label='$x-values$')
-                plt.plot(ty, ys, 'c', label='$y-values$')
-                
-                
-                #plt.plot(predict_x, predict_y, 'blue', label='$mean-values$')
-                
                 plt.xlabel('$time$')
                 plt.ylabel('$value$')
                 plt.legend(loc='upper left')
                
-                fig = plt.figure() 
-                plt.scatter(tx, predict_x, c='m')
-                #[plt.scatter(x+std, x-std, c='black') for x,std in zip(predict_x, std_x)]
-                plt.plot(tx, xs, 'black')
-               
-                plt.scatter(ty, predict_y, c='c')
-                #[plt.scatter(y+std, y-std, c='black') for y,std in zip(predict_y, std_y)]
-                plt.plot(ty, ys, 'black')
-                
-                #plt.plot(E.points[:,0], E.points[:,1], 'b-', label=u'expected')
-                #[plt.scatter(p, q, c='r') for p,q in zip(xepoints, yepoints)]
-                #[plt.scatter(p, q, c='r') for p,q in zip(nxepoints, nyepoints)]
-                #plt.scatter(points[:,0], seq, c='g')
-                #plt.plot(cov_x[0], cov_x[1], 'r:', markersize=10, label='covariance')
-                #[plt.plot(cov, nextcov, 'r:', markersize=10) for cov,nextcov in zip(cov_x[2:], cov_x[3:])]
-                #[plt.plot(cov, nextcov, 'r:', markersize=10) for cov,nextcov in zip(cov_y, cov_y[1:])]
-                #test =  cov_x*points[:,0].T
-                #test2 = cov_y*points[:,1].T
-                #test = []
-                #for ((covx, covy), (px,py)) in zip(zip(cov_x, cov_y), zip(points[:,0], points[:,1])):
-                #    test.append([px+covx*px, py+covy*py])
-                #test = np.array([[px + covx*px, py + covy*py] for ((covx,covy),(px,py)) in zip(zip(cov_x, cov_y),zip(points[:,0], points[:,1]))])
-                #test = np.array([[px + covx*px, py + covy*py] for ((covx,covy),(px,py)) in zip(zip(cov_x, cov_y),zip(points[:,0], points[:,1]))])
-                #[plt.plot(var[0], var[1], c='r') for var in test]
-                #[plt.scatter(var, nextvar, c='r') for var,nextvar in zip(test,test2)]
-                #[plt.plot(cov*points[:,0], nextcov*points[:,1], markersize=10) for cov,nextcov in zip(cov_x, cov_y)]
-                #plt.plot(x, y_pred, 'b-', label=u'Prediction')                
-                #x = np.atleast_2d(np.linspace(0, 1000, len(cov_x)))
-                
-                #plt.plot(points[:,0], f(x), 'r:', label=u'$f(x) = x\,\sin(x)$')
-                #plt.plot(X, y, 'r.', markersize=10, label=u'Observations')
-                #plt.plot(points[:,0], y_pred, 'b-', label=u'Prediction')
-                
-                #plt.errorbar(predict_x, predict_y, yerr=std_y,xerr=std_x, capsize=0) 
-                #plt.fill(np.concatenate([tx, tx[::-1]]),
-                #    np.concatenate ([
-                #    predict_x - std_x,(
-                #    predict_x + std_x)[::-1]]),
-                #   alpha=.5, fc='b', ec='None')
-                
-                #plt.fill(np.concatenate([ty, ty[::-1]]),
-                #    np.concatenate ([
-                #    predict_y - std_x,(
-                #    predict_y + std_x)[::-1]]),
-                #    alpha=.5, fc='b', ec='None')
-                
-                
-                #plt.xlabel('$x$')
-                #plt.ylabel('$y$')
-                
-                #plt.ylim(-10, 20)
-                #plt.scatter(points[:,0], points[:,1])
-
-                #plt.legend(loc='upper left')                
                 plt.figure()
-                [plt.plot(self.pathdict[key].points[:,0], self.pathdict[key].points[:,1], 'g') for key in clusters[cluster]]                
+                plt.title(cluster)
+
+                #plt.scatter(mt, predict_x, c='m')
+                #plt.scatter(tx, predict_x, c='m')
+                
+                
+                plt.fill(np.concatenate([seqx, seqx[::-1]]),
+                         np.concatenate([predict_x - np.square(std_x),
+                                        (predict_x + np.square(std_x))[::-1]]),
+                alpha=.5, fc='b', ec='None', label='95% confidence interval')
+                
+                #plt.fill(np.concatenate([mt, mt[::-1]]),
+                #         np.concatenate([predict_x - std_x,
+                #                        (predict_x + std_x)[::-1]]),
+                #alpha=.5, fc='b', ec='None', label='95% confidence interval')
+                
+                for x,y in zip(np.split(tx,len(value)), np.split(xs, len(value))):
+                    plt.plot(x, y, c='black')
+                
+                plt.scatter(seqx, predict_x, c='m')
+                #plt.plot(tx, xs, 'black')
+                #plt.scatter(std_x, std_y)
+               
+                #plt.scatter(ty, predict_y, c='c')
+
+                #plt.fill(np.concatenate([ty, ty[::-1]]),
+                #         np.concatenate([predict_y - 1.96 * std_y,
+                #                        (predict_y + 1.96 * std_y)[::-1]]),
+                #alpha=.5, fc='b', ec='None', label='95% confidence interval')
+
+                #plt.plot(ty, ys, 'black')
+
+
+                plt.figure()
+                plt.title(cluster)
+                [plt.plot(self.pathdict[key].points[:,0], self.pathdict[key].points[:,1], 'g') for key in clusters[cluster]]               
                 plt.show()
-                #process.fit(trainingdata,E.points)
-                #x_pred = np.linspace(-6,6)
-                #y_pred, sigma = process.predict(x_pred, return_std=True)
-                #plt.plot(x_pred, y_pred)
-                #gp.GaussianProcessRegressor(,,"theta",,,,)
+                #with open(cluster,mode='wt') as data:
+                #    data = csv.writer(data, delimiter=',')
+                #    for x, t in zip(xs, tx):
+                #        data.writerow([str(x), str(t)])
 
     def plotcompare(self, listoftrajs, colors):
 
@@ -457,7 +441,7 @@ class trajectories:
         count = 0
         colors = []
 
-        for _ in range(10):
+        for _ in range(1000):
             colors.append('%06X' % rdm.randint(0, 0xFFFFFF))
 
         for element in clusters:
@@ -531,16 +515,46 @@ def readcsvfile(filename='testfile.csv', numoftrajstoread=0):
                     newtrajectory.add_point([int(row[2]), int(row[3]),float(row[0])]) 
                     isnewtrajectory = False
 
-
-
-readcsvfile('testfile.csv',10)
+trajstoread = 10
+readcsvfile('testfile.csv', trajstoread)
 trajs.filter_noise()
-trajs.interpol_points(10)
-#trajs.interpol_test(10)
+n = sum([len(trajs.pathdict[key].points) for key in trajs.pathdict])/len(trajs.pathdict)
+print(n)
+#n = 37 #for 100 trajs
+#n = 36 #for 50 trajs
+n = 23  #for 10 trajs
+trajs.interpol_points(int(n))
 
-#trajs.plot()
+pointsxt = np.empty([0,2])
+pointsyt = np.empty([0,2])
+                
+for key in trajs.pathdict:
+    pointsxt = np.append(pointsxt,trajs.pathdict[key].points[:,0:3:2], axis=0)
+    pointsyt = np.append(pointsyt,trajs.pathdict[key].points[:,1:3], axis=0)
 
-CLUSTERS = trajs.kmeansclustering(3, 600000)
+xs = pointsxt[:,0]
+ys = pointsyt[:,0]
+
+tx = pointsxt[:,1]
+ty = pointsyt[:,1]
+
+plt.figure()
+for idx,(x,y) in enumerate(zip(np.split(tx,len(trajs.pathdict)), np.split(xs, len(trajs.pathdict)))):
+    plt.plot(x, y)
+
+plt.figure()
+for idx,(x,y) in enumerate(zip(np.split(tx,len(trajs.pathdict)), np.split(xs, len(trajs.pathdict)))):
+    plt.plot(x, y)
+plt.show()
+
+trajs.plot()
+
+#K=11 #for 100 trajs
+K=2 #for 10 trajs
+#trajs.elbow_method_for_k(2, trajstoread-20)
+#26 for 50
+
+CLUSTERS = trajs.kmeansclustering(K, 600000, 5, False)[0]
 trajs.generate_guassian_processes(CLUSTERS)
 
 #trajs.pathdict[next(iter(trajs.pathdict))]. #test row for a n trajectory
