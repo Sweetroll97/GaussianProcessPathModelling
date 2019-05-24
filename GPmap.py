@@ -15,6 +15,7 @@ from tqdm import tqdm
 from sklearn import gaussian_process as gp
 #from sklearn.cluster import KMeans
 #from sklearn.gaussian_process import
+from typing import NamedTuple
 
 class trajectory:
     """class docstring"""
@@ -63,6 +64,9 @@ class trajectories:
     """
     def __init__(self):
         self.pathdict = {}
+        self.numofpoints = 0
+        self.clusters = {}
+        self.gaussian_processes = {}
 
     def add_trajectory(self, _id, _trajectory):
         """adds a trajectory _id for the key and the second parameter is the trajectory object
@@ -198,6 +202,7 @@ class trajectories:
                 ischanging = False
                 if plotit:
                     self.plotclusters(clusters)
+                self.clusters = clusters
                 return clusters, threshold
 
     def calc_mean_traj(self, keys):
@@ -235,6 +240,8 @@ class trajectories:
             segment_length = function_length/(number_of_points-1)
 
             #Calculate distance from first point to each other point
+            if number_of_points < 2:
+                raise ValueError('not enaugh points to interpolate')
             li = self.pathdict[key].get_lengths_from_first_point()
 
             temp_traj = trajectory()
@@ -258,130 +265,160 @@ class trajectories:
             if plotresult:
                 self.plotcompare([self.pathdict[key], temp_traj], [0xFF0000, 0x00FF00])
             self.pathdict[key] = temp_traj
+            self.numofpoints = number_of_points
 
-    def generate_guassian_processes(self, clusters):
+    def generate_guassian_processes(self, clusters, plotit = False, numofsamples=100, plotcov=False):
         """generates two gaussian proccesses for x and y for each cluster"""
         #params = gp.kernels.Hyperparameter('theta',float,3,3) #testing stage
+        class struct(NamedTuple):
+            process_x: gp.GaussianProcessRegressor
+            process_y: gp.GaussianProcessRegressor
+            
         self.normalize_timestamps()
         for cluster, value in clusters.items():
             if len(cluster) > 1:
-               
+                if plotit:
+                    plt.figure()
+                    plt.title(cluster)
+                    for key in clusters[cluster]:
+                        plt.plot(self.pathdict[key].points[:, 0], self.pathdict[key].points[:, 1], 'g')
+                    plt.show()
 
-                pointsxt = np.empty([0,2])
-                pointsyt = np.empty([0,2])
+                #pointsxt = np.empty([0, 2])
+                #pointsyt = np.empty([0, 2])
+
+                #for key in value:
+                    #pointsxt = np.append(pointsxt, self.pathdict[key].points[:, 0:3:2], axis=0)
+                    #pointsyt = np.append(pointsyt, self.pathdict[key].points[:, 1:3], axis=0)
+                #    pointsxt = np.append(pointsxt, self.pathdict[key].points[:, 0], axis=0)
+                #    pointsyt = np.append(pointsyt, self.pathdict[key].points[:, 1], axis=0)
                 
-                for key in value:
-                    pointsxt = np.append(pointsxt,self.pathdict[key].points[:,0:3:2], axis=0)
-                    pointsyt = np.append(pointsyt,self.pathdict[key].points[:,1:3], axis=0)
-                    
-               
-                    
 
-                xs = pointsxt[:,0]
+                #xs = pointsxt[:, 0]
+                xs = np.array([self.pathdict[key].points[:,0] for key in value]).flatten()
+                ys = np.array([self.pathdict[key].points[:,1] for key in value]).flatten()
                 #print(xs)
-                
+
                 #for i in range(0, 23):
                 #    xs[i] += rdm.random()*5000
-                
+
                 #for i, _ in enumerate(xs):
                 #    xs[i] += rdm.random()*20000
                 #print(xs)
                 #T, X coords
 
                 #ys = pointsyt[:,0]
-                
-                tx = pointsxt[:,1]
+
+                #tx = pointsxt[:, 1]
                 #ty = pointsyt[:,1]
-                
+
                 #tx = np.tile(np.linspace(0, len(self.pathdict[value[0]].points)-1,len(self.pathdict[value[0]].points)),len(value))
+                if self.numofpoints <= 0:
+                    raise ValueError("Not interpolated")
+                #tx = np.tile(np.linspace(0, self.numofpoints-1, self.numofpoints), len(value)).reshape(-1,1)
+                #ty = tx
+                
+                tx = np.array([self.pathdict[key].points[:,2] for key in value]).flatten().reshape(-1,1)
+                ty = tx
 
                 lengthscale = 1.0
                 noise = 1.0
                 n = 20
-                constant = 2
+                (constant_x, constant_y) = (2.0, 2.0)
 
                 theta_x,theta_y = (316.0,1.0)
 
-                kx = theta_x*gp.kernels.RBF(lengthscale,(10.0,1e5)) + gp.kernels.WhiteKernel(noise, (1e-5,1.0)) + constant
+                kx = theta_x*gp.kernels.RBF(lengthscale,(10.0,1e5)) + gp.kernels.WhiteKernel(noise, (1e-5,1.0)) + constant_x
                 print("x kernel before:", kx)
-                process_x = gp.GaussianProcessRegressor(kernel=kx, n_restarts_optimizer=n, normalize_y=False, alpha=0)
-                
-                #ky = theta_y*gp.kernels.RBF(lengthscale) + gp.kernels.WhiteKernel(noise)
-                #print("y kernel before:", ky)
-                #process_y = gp.GaussianProcessRegressor(kernel=ky, n_restarts_optimizer=n, normalize_y=True, alpha=0)
+                process_x = gp.GaussianProcessRegressor(kernel=kx, n_restarts_optimizer=n, normalize_y=False, alpha=0, copy_X_train=True)
 
-                process_x.fit(tx.reshape(-1,1), xs.reshape(-1,1))
+                ky = theta_y*gp.kernels.RBF(lengthscale, (10.0, 1e5)) + gp.kernels.WhiteKernel(noise, (1e-5, 1.0)) + constant_y
+                print("y kernel before:", ky)
+                process_y = gp.GaussianProcessRegressor(kernel=ky, n_restarts_optimizer=n, normalize_y=False, alpha=0, copy_X_train=True)
+
+                process_x.fit(tx, xs)
 
                 print("")
                 print("x kernel after:", process_x.kernel_)
 
-                #process_y.fit(ty.reshape(-1,1), ys.reshape(-1,1))
+                process_y.fit(ty, ys)
 
-                #print("y kernel after:", process_y.kernel_)
-                #print("")
+                print("y kernel after:", process_y.kernel_)
+                print("")
+               
+                if plotit:
+                    plt.figure()
+                    plt.title("process x")
+                    self.plotprocess(process_x, numofsamples, plotcov)
                     
-                mt = self.calc_mean_traj(value).points[:,2].reshape(-1,1)
+                    plt.figure()
+                    plt.title("process y")
+                    self.plotprocess(process_y, numofsamples, plotcov)
+                    #seqx = np.atleast_2d(np.linspace(min(tx), max(tx), len(tx))).reshape(-1,1)
+                    #seqy = np.atleast_2d(np.linspace(min(ty), max(ty), len(ty))).reshape(-1,1)
+                
+                    #for x,y in zip(np.split(tx,len(value)), np.split(xs, len(value))):
+                    #    plt.plot(x, y, c='black')
 
-                seqx = np.sort(tx).reshape(-1,1)[len(value)-1:]
-                seqx = np.atleast_2d(np.linspace(min(tx), max(tx), len(tx))).reshape(-1,1)
-                #seqx = np.atleast_2d(self.calc_mean_traj(value).points[:,2]).reshape(-1,1)
-                predict_x,std_x = process_x.predict(seqx, return_std=True)
+                
+                    #samples = process_x.sample_y(seqx,numofsamples)
+                    #for sample in samples.T:
+                    #    plt.plot(seqx, sample)
+
+                #mt = self.calc_mean_traj(value).points[:,2].reshape(-1,1)
+                #seqx = self.calc_mean_traj(value).points[:, 0:3:2]
+                
+                #covariance = process_x.kernel.__call__(tx, xs)
+                
+                #predict_x,std_x = process_x.predict(seqx, return_std=True)
                 #predict_y,std_y = process_y.predict(ty.reshape(-1,1), return_std=True)
                 #print(std_x)
                 #plt.imshow(std_x)
-                
-                
-                for x,y in zip(np.split(tx,len(value)), np.split(xs, len(value))):
-                    plt.plot(x, y, c='black')
-                
-                for _ in range(10):
-                    test = process_x.sample_y(seqx)
-                    plt.plot(seqx,test.squeeze())
-                plt.scatter(seqx, predict_x, c='m')
-                
+
+                #plt.scatter(seqx, predict_x, c='m')
                 #print(predict_x)
                 #print("")
                 #print(tx)
                 #print("")
                 #print(std_x)
-                
-                plt.figure()
-                plt.title(cluster)
-                
-                for idx,(x,y) in enumerate(zip(np.split(tx,len(value)), np.split(xs, len(value)))):
-                    plt.plot(x, y, label='x\'s traj: '+str(idx+1))
-                    
+
+                #plt.figure()
+                #plt.title(cluster)
+
+                #for idx,(x, y) in enumerate(zip(np.split(tx, len(value)), np.split(xs, len(value)))):
+                #    plt.plot(x, y, label='x\'s traj: '+str(idx+1))
+
                 #plt.plot(tx, xs, 'm', label='$x-values$')
                 #plt.plot(ty, ys, 'c', label='$y-values$')
 
-                plt.xlabel('$time$')
-                plt.ylabel('$value$')
-                plt.legend(loc='upper left')
-               
-                plt.figure()
-                plt.title(cluster)
+                #plt.xlabel('$time$')
+                #plt.ylabel('$value$')
+                #plt.legend(loc='upper left')
+
+                #plt.figure()
+                #plt.title(cluster)
 
                 #plt.scatter(mt, predict_x, c='m')
                 #plt.scatter(tx, predict_x, c='m')
-                
-                
-                plt.fill(np.concatenate([seqx, seqx[::-1]]),
-                         np.concatenate([predict_x - np.square(std_x),
-                                        (predict_x + np.square(std_x))[::-1]]),
-                alpha=.5, fc='b', ec='None', label='95% confidence interval')
-                
+                #plt.fill_between(seqx.flatten(), predict_x.flatten()-np.square(std_x).flatten(), predict_x.flatten()+np.square(std_x).flatten(), color='b', alpha=0.2)
+                #plt.errorbar(seqx, predict_x, np.square(std_x))
+                #plt.fill(np.concatenate([seqx, seqx[::-1]]),
+                #         np.concatenate([predict_x - np.square(std_x),
+                #                        (predict_x + np.square(std_x))[::-1]]),
+                #alpha=.5, fc='b', ec='None', label='95% confidence interval')
+
                 #plt.fill(np.concatenate([mt, mt[::-1]]),
                 #         np.concatenate([predict_x - std_x,
                 #                        (predict_x + std_x)[::-1]]),
                 #alpha=.5, fc='b', ec='None', label='95% confidence interval')
-                
-                for x,y in zip(np.split(tx,len(value)), np.split(xs, len(value))):
-                    plt.plot(x, y, c='black')
-                
-                plt.scatter(seqx, predict_x, c='m')
+
+                #for x, y in zip(np.split(tx, len(value)), np.split(xs, len(value))):
+                #    plt.plot(x, y, c='black')
+
+                #plt.scatter(seqx, predict_x, c='m')
                 #plt.plot(tx, xs, 'black')
                 #plt.scatter(std_x, std_y)
-               
+
                 #plt.scatter(ty, predict_y, c='c')
 
                 #plt.fill(np.concatenate([ty, ty[::-1]]),
@@ -392,15 +429,79 @@ class trajectories:
                 #plt.plot(ty, ys, 'black')
 
 
-                plt.figure()
-                plt.title(cluster)
-                [plt.plot(self.pathdict[key].points[:,0], self.pathdict[key].points[:,1], 'g') for key in clusters[cluster]]               
-                plt.show()
                 #with open(cluster,mode='wt') as data:
                 #    data = csv.writer(data, delimiter=',')
                 #    for x, t in zip(xs, tx):
-                #        data.writerow([str(x), str(t)])
+                #        data.writerow([str(x), str(t)])        
+                self.gaussian_processes[cluster] = struct(process_x, process_y)
+                
+    def gaussian_process_prediction(self, observations = None):
+        """predicts the future path of observations"""
+        observations = np.array([
+            [26636.0, 0.0],
+            [25563.269545667717, 1.5219380855560303],
+            [24427.892169907624, 2.952316999435425],
+            [23262.136978459646, 4.499892473220825],
+            [22137.60101487511, 6.001432180404663],
+            [21071.31276888807, 7.722446441650391],
+            [20104.233448941595, 9.700586080551147],
+            [19148.348601746715, 11.554569959640503],
+            [18157.061861841583, 13.13681936264038],
+            [17078.007119093843, 14.117368459701538],
+            [16283.555851030129, 15.54201364517212],
+            [15422.862936149199, 17.151325225830078],
+            [14528.944531411305, 18.715941905975342],
+            [13676.601709931612, 20.377726078033447],
+            [12936.961101377226, 21.87928009033203],
+            [12047.812383706154, 23.147696256637573],
+            [11201.079379086052, 24.791006088256836],
+            [10281.543248305608, 26.36141848564148],
+            [9651.478001735219, 27.848175525665283],
+            [9084.964958646353, 29.18827986717224],
+            [8658.649625048833, 30.658584117889404],
+            [8198.830420704067, 31.98782181739807]])
+        for cluster in self.gaussian_processes.values():
+            processx = cluster.process_x#.fit(observations[:5, 1].reshape(1,-1), observations[:5, 0].reshape(1,-1))
+            mean, std = processx.predict(observations[:5,1].reshape(1,-1), return_std=True)
+            seq = np.atleast_2d(np.linspace(min(observations[:,1]), max(observations[:,1]), 5)).reshape(-1,1)
+            plt.fill_between(seq.flatten(), mean.flatten()-np.square(std).flatten(), mean.flatten()+np.square(std).flatten(), color='b', alpha=0.2)
+            
+            plt.scatter(seq, mean, c='m')
+        print("in progress")
+    def plotprocess(self, process, numofsamples=100, plotcov=False):
+        values = process.y_train_
+        t = process.X_train_
+        seq = np.atleast_2d(np.linspace(min(t), max(t), len(t))).reshape(-1,1)
+        
+        num_of_parallel_trajs = np.count_nonzero(t==0)
+        for x,y in zip(np.split(t, num_of_parallel_trajs), np.split(values, num_of_parallel_trajs)):
+            plt.plot(x, y, c='black')
 
+    
+        #samples = process.sample_y(seq, numofsamples)
+        #for sample in samples.T:
+        #    plt.plot(seq, sample)
+            
+        if plotcov:
+            predict,std = process.predict(seq, return_std=True)
+            plt.scatter(seq, predict, c='m')
+            plt.fill_between(seq.flatten(), predict.flatten()-np.square(std).flatten(), 
+                             predict.flatten()+np.square(std).flatten(), color='b', alpha=0.2)
+
+    def plotproceses(self):
+        for _, cluster in self.gaussian_processes.items():
+            process_x = cluster.process_x
+            process_y = cluster.process_y
+            
+            xs = process_x.alpha_
+            ys = process_y.alpha_
+            
+            tx = process_x.X_train_
+            ty = process_y.X_train_
+        
+            seqx = np.atleast_2d(np.linspace(min(tx), max(tx), len(tx))).reshape(-1,1)
+            seqy = np.atleast_2d(np.linspace(min(ty), max(ty), len(ty))).reshape(-1,1)
+            
     def plotcompare(self, listoftrajs, colors):
 
         #= rdm.sample(range(colorrange), len(listoftrajs))
@@ -473,11 +574,24 @@ class trajectories:
 
 trajs = trajectories()
 
-def countrows(file):
+def countrows(file, numoftrajs=0):
     """counts all rows of a csv file"""
     with open(file) as data:
         data = csv.reader(data, delimiter=',')
-        return sum([1 for row in data if row[0] != '###'])
+        
+        if numoftrajs == 0:
+            return sum([1 for row in data if row[0] != '###'])
+        counter=0
+        Sum = 0
+        for row in data:
+            if row[0] == '###':
+                counter+=1
+            else:
+                if counter >= numoftrajs:
+                    break;
+                else:
+                    Sum += 1
+
 
 def readcsvfile(filename='testfile.csv', numoftrajstoread=0):
     """reads a csv file and imports it into a trajectories object"""
@@ -486,7 +600,7 @@ def readcsvfile(filename='testfile.csv', numoftrajstoread=0):
     with open(filename) as data:
         data = csv.reader(data, delimiter=',')
         trajnr = 0
-        rows = countrows(filename)
+        rows = countrows(filename, numoftrajstoread)
         if numoftrajstoread > 0:
             rows = numoftrajstoread
         #data.seek(0)
@@ -512,7 +626,7 @@ def readcsvfile(filename='testfile.csv', numoftrajstoread=0):
                 else:
                     key = row[1]
                     newtrajectory = trajectory()
-                    newtrajectory.add_point([int(row[2]), int(row[3]),float(row[0])]) 
+                    newtrajectory.add_point([int(row[2]), int(row[3]),float(row[0])])
                     isnewtrajectory = False
 
 trajstoread = 10
@@ -524,10 +638,11 @@ print(n)
 #n = 36 #for 50 trajs
 n = 23  #for 10 trajs
 trajs.interpol_points(int(n))
+trajs.plot()
 
 pointsxt = np.empty([0,2])
 pointsyt = np.empty([0,2])
-                
+
 for key in trajs.pathdict:
     pointsxt = np.append(pointsxt,trajs.pathdict[key].points[:,0:3:2], axis=0)
     pointsyt = np.append(pointsyt,trajs.pathdict[key].points[:,1:3], axis=0)
@@ -547,7 +662,7 @@ for idx,(x,y) in enumerate(zip(np.split(tx,len(trajs.pathdict)), np.split(xs, le
     plt.plot(x, y)
 plt.show()
 
-trajs.plot()
+
 
 #K=11 #for 100 trajs
 K=2 #for 10 trajs
@@ -555,7 +670,9 @@ K=2 #for 10 trajs
 #26 for 50
 
 CLUSTERS = trajs.kmeansclustering(K, 600000, 5, False)[0]
-trajs.generate_guassian_processes(CLUSTERS)
+trajs.generate_guassian_processes(CLUSTERS, True, plotcov=True)
+trajs.plotproceses()
+#trajs.gaussian_process_prediction()
 
 #trajs.pathdict[next(iter(trajs.pathdict))]. #test row for a n trajectory
 #trajs.calc_mean_traj([])
