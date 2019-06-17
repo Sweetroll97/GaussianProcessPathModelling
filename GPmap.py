@@ -592,17 +592,18 @@ class Model():
 
 class GaussianMixtureModel():
 
-    def __init__(self, trajs,K,covariance,M,treashold, init_points = None):
+    def __init__(self, trajs,K,covariance,M, CENTROIDS ,init_points = None,):
         self.trajs = copy.deepcopy(trajs)
         self.T = len(self.trajs.pathdict[next(iter(self.trajs.pathdict.items()))[0]].points)
         self.M = M
         self.beta = self.T/K
         self.K = K
         self.covariance = covariance
+        self.centroids = CENTROIDS
         self.models = []
-        self.set_models(treashold)
+        self.set_models()
 
-    def set_models(self,treshold = 20000):
+    def set_models(self):
         #Set all
         num_of_trajectories = len(self.trajs.pathdict)
         for i in range(self.M):
@@ -610,38 +611,12 @@ class GaussianMixtureModel():
                 self.trajs.pathdict[t_key].weighted_probability.append(0.0)
                 self.trajs.pathdict[t_key].probability.append(0.0)
 
-        #Generate M centroids
-        counter = 0
-        rdmkeys = rdm.sample(list(self.trajs.pathdict.keys()), self.M)
-        istoclose = True
-        while istoclose:
-            istoclose = False
-            for key1, key2 in zip(rdmkeys, rdmkeys[1:]):
-                if self.trajs.pathdict[key1].calc_distance(self.trajs.pathdict[key2]) < treshold:
-                    if counter > 50:
-                        counter = 0
-                        treshold-= 1
-                        treshold = max(treshold, 0)
-                    counter += 1
-                    istoclose = True
-                    rdmkeys.remove(key1)
-                    treshold -= 1
-                    if treshold < 0:
-                        treshold = 0
-                    rdmkeys.append(rdm.choice([newkey for newkey in list(self.trajs.pathdict.keys()) if newkey not in rdmkeys]))
-        #Set initial probability for the centroids
         diviates = [[155.0,230.0,0.0],[-125.0,-230.0,0.0],[-125.0,-230.0,0.0]]
+        for t_key in self.centroids:
+            self.models.append(self.centroids[t_key].points)
 
-        for i,key in enumerate(rdmkeys):
-                self.trajs.pathdict[key].probability[i] = 0.0
-                self.trajs.pathdict[key].weighted_probability[i] = 0.0
-                model_i = Model(self.trajs.pathdict[key].points)
-                self.models.append(model_i.traj)
 
-#       global models_created
-#       for i in range(self.M):
-#           model_i = Model(models_created[i].points)
-#           self.models.append(model_i.traj)
+
         self.plot_models(True)
         
         
@@ -656,8 +631,8 @@ class GaussianMixtureModel():
                 plt.plot(self.trajs.pathdict[t_key].points[:,0],self.trajs.pathdict[t_key].points[:,1],color= colors[traj_color])
                 
         for c_i in range(self.M):
-            plt.scatter(self.models[c_i][:,0], self.models[c_i][:,1], alpha=0.5, marker=r'*',color=colors[c_i])
-            plt.plot(self.models[c_i][:,0], self.models[c_i][:,1], c = colors[c_i])
+            plt.scatter(self.models[c_i][:,0], self.models[c_i][:,1], alpha=0.5, marker=r'*',color=colors[c_i], zorder = 9999999)
+            #plt.plot(self.models[c_i][:,0], self.models[c_i][:,1], c = colors[c_i])
         plt.show()     
 
     def plot(self):
@@ -803,7 +778,6 @@ class GaussianMixtureModel():
             print(movement)
             if laps >= 200:
                 swap = False
-            print("----------")
             if laps% 40 == 0:
                 self.plot()
         print("-DONE-")
@@ -931,9 +905,8 @@ CENTROIDS = trajs.generate_centroids(M, plotit=True, threshold=152000)#152000
 #Number_of_trajs = 40
 #generate_data(M,T, init_points, noise, Number_of_trajs)
 
-#treashold = 20000
 #covariance = 1930
-#GMM = GaussianMixtureModel(trajs,K,covariance,M,treashold)
+GMM = GaussianMixtureModel(trajs,K,covariance,M, CENTROIDS)
 #GMM.GMM()
 
 #K=11 #for 100 trajs
