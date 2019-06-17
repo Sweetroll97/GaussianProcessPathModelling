@@ -162,7 +162,7 @@ class trajectories:
 
     def kmeansclustering(self, k, threshold=200000, acceptible_distance=5, plotit=False, centroids=None):
         """generates k clusters with centroids that is further away than threshold"""
-        if not centroids and len(centroids) == k:
+        if not centroids or len(centroids) != k:
             if len(centroids) != k:
                 print("kmeans: Warning given centroids does not match k, generating new centroids!")
             centroids = self.generate_centroids(k, threshold, plotit)
@@ -931,10 +931,10 @@ CENTROIDS = trajs.generate_centroids(M, plotit=True, threshold=152000)#152000
 #Number_of_trajs = 40
 #generate_data(M,T, init_points, noise, Number_of_trajs)
 
-treashold = 20000
-covariance = 1930
-GMM = GaussianMixtureModel(trajs,K,covariance,M,treashold)
-GMM.GMM()
+#treashold = 20000
+#covariance = 1930
+#GMM = GaussianMixtureModel(trajs,K,covariance,M,treashold)
+#GMM.GMM()
 
 #K=11 #for 100 trajs
 #K=2 #for 10 trajs
