@@ -585,6 +585,10 @@ class trajectories:
         for idx,(x,y) in enumerate(zip(np.split(ty,len(trajs.pathdict)), np.split(ys, len(trajs.pathdict)))):
             plt.plot(x, y)
         plt.show()
+        
+class Model():
+    def __init__(self, list_of_points):
+        self.traj = copy.deepcopy(list_of_points)
 
 class GaussianMixtureModel():
 
@@ -595,13 +599,10 @@ class GaussianMixtureModel():
         self.beta = self.T/K
         self.K = K
         self.covariance = covariance
-        self.colors = []
-        self.importance = []
         self.models = []
-        self.set_centroids(treashold)
-        self.plotta()
+        self.set_models(treashold)
 
-    def set_centroids(self,treshold = 20000):
+    def set_models(self,treshold = 20000):
         #Set all
         num_of_trajectories = len(self.trajs.pathdict)
         for i in range(self.M):
@@ -641,9 +642,42 @@ class GaussianMixtureModel():
 #       for i in range(self.M):
 #           model_i = Model(models_created[i].points)
 #           self.models.append(model_i.traj)
-        self.plotclusters(True)
+        self.plot_models(True)
+        
+        
+    def plot_models(self, first_run = False):# xmin, xmax, ymin, ymaxset_centroids
+        colors = ["red", "green", "blue", "black", "orange", "darkgreen",
+                  "darkblue", "gold", "brown", "yellow", "pink", "purple", "grey"]
+        for t_key in self.trajs.pathdict:
+            if first_run:
+                plt.plot(self.trajs.pathdict[t_key].points[:,0],self.trajs.pathdict[t_key].points[:,1],color= "lightblue")
+            else:
+                traj_color = self.trajs.pathdict[t_key].get_highest_model_index()
+                plt.plot(self.trajs.pathdict[t_key].points[:,0],self.trajs.pathdict[t_key].points[:,1],color= colors[traj_color])
+                
+        for c_i in range(self.M):
+            plt.scatter(self.models[c_i][:,0], self.models[c_i][:,1], alpha=0.5, marker=r'*',color=colors[c_i])
+            plt.plot(self.models[c_i][:,0], self.models[c_i][:,1], c = colors[c_i])
+        plt.show()     
 
-    def get_mean_cluster_i(self,m): # Get the "beta" cluster
+    def plot(self):
+        for c_i in range(self.M):
+            clusters = np.empty([0,2])
+            colors = ["red", "green", "blue", "black", "orange", "darkgreen",
+                      "darkblue", "gold", "brown", "yellow", "pink", "purple", "grey"]
+            for i,t_key in enumerate(self.trajs.pathdict):
+                if np.isnan(self.trajs.pathdict[t_key].probability[c_i]):
+                    clusters = np.append(clusters,[[i,0.0]],axis=0)
+                else:
+                    clusters = np.append(clusters,[[i,self.trajs.pathdict[t_key].probability[c_i]]],axis=0)
+            plt.scatter(clusters[:,0], clusters[:,1], c=colors[c_i])
+        plt.title("Models probability")
+        plt.xlabel("Trajectorys")
+        plt.ylabel("Probability")
+        plt.show()
+        self.plot_models()    
+
+    def get_mean_model_i(self,m): # Get the "beta" cluster
         mean_trajectory = np.empty([0,3])
         for i in range(0,self.T):
             sum_from_points = np.array([0.0,0.0,0.0])
@@ -661,9 +695,6 @@ class GaussianMixtureModel():
         #return mean_trajectory[:,:2]/self.M
         #return mean_trajectory[:,:2]#*len(self.trajs.pathdict)/self.M/(len(self.trajs.pathdict)/self.M)
 
-    def get_mu_point(self,m,j):
-        arr = np.array([self.get_mean_cluster_i(m)[j]])
-        return [arr[0][0],arr[0][1]]
 
     def gaussian_1_dimension(self,point,m,j):
         c = math.exp((-1/(2*(self.covariance)**2))*(np.linalg.norm(point[:-1]-self.models[m][j,:2])**2))
@@ -701,7 +732,7 @@ class GaussianMixtureModel():
                 if diviation > max_diviation:
                     max_diviation = diviation
                 traj.probability[m] = quote       #P(Cm\ti)
-                #bayesian_matrix[m][t_i] = quote
+                bayesian_matrix[m][t_i] = quote
 
 
 
@@ -737,7 +768,6 @@ class GaussianMixtureModel():
                 #-----------------------------------------------------------------#
                 #Calculate the Expectations
                 for t in range(self.T):#For each Time spep in
-
                     probability *= self.gaussian_1_dimension(self.trajs.pathdict[t_key].points[t],m,j)
                 #*****************************************************************#
                     if (t%(self.beta)) == (self.beta - 1):
@@ -751,28 +781,14 @@ class GaussianMixtureModel():
         #-----------------------------------------------------------------#
         normalised_bayesian_matrix = self.normalize(bayesian_matrix)
         max_div = self.set_weights(np.array(normalised_bayesian_matrix))
-        #max_div = self.set_weights(np.array(bayesian_matrix))
         for c_i in range(self.M):
-            self.models[c_i] = self.get_mean_cluster_i(c_i)
+            self.models[c_i] = self.get_mean_model_i(c_i)
         #*****************************************************************#
         return max_div
+    
 
-    def plotta(self):
-        for c_i in range(self.M):
-            clusters = np.empty([0,2])
-            colors = ["red", "green", "blue", "black", "orange", "darkgreen",
-                      "darkblue", "gold", "brown", "yellow", "pink", "purple", "grey"]
-            for i,t_key in enumerate(self.trajs.pathdict):
-                if np.isnan(self.trajs.pathdict[t_key].probability[c_i]):
-                    clusters = np.append(clusters,[[i,0.0]],axis=0)
-                else:
-                    clusters = np.append(clusters,[[i,self.trajs.pathdict[t_key].probability[c_i]]],axis=0)
-            plt.scatter(clusters[:,0], clusters[:,1], c=colors[c_i])
-        plt.title("Models probability")
-        plt.xlabel("Trajectorys")
-        plt.ylabel("Probability")
-        plt.show()
-        self.plotclusters()
+        
+   
 
     def GMM(self, max_div = 0.0):
         swap = True
@@ -788,30 +804,14 @@ class GaussianMixtureModel():
             if laps >= 200:
                 swap = False
             print("----------")
-            if laps% 20 == 0:
-                self.plotta()
+            if laps% 40 == 0:
+                self.plot()
         print("-DONE-")
-        self.plotta()
+        self.plot()
 
-    def plotclusters(self, first_run = False):# xmin, xmax, ymin, ymaxset_centroids
-        colors = ["red", "green", "blue", "black", "orange", "darkgreen",
-                  "darkblue", "gold", "brown", "yellow", "pink", "purple", "grey"]
-        for t_key in self.trajs.pathdict:
-            if first_run:
-                plt.plot(self.trajs.pathdict[t_key].points[:,0],self.trajs.pathdict[t_key].points[:,1],color= "lightblue")
-            else:
-                traj_color = self.trajs.pathdict[t_key].get_highest_model_index()
-                plt.plot(self.trajs.pathdict[t_key].points[:,0],self.trajs.pathdict[t_key].points[:,1],color= colors[traj_color])
-            #print(self.trajs.pathdict[t_key].probability)
 
-        for c_i in range(self.M):
-            plt.scatter(self.models[c_i][:,0], self.models[c_i][:,1], alpha=0.5, marker=r'$\clubsuit$',color=colors[c_i])
-            plt.plot(self.models[c_i][:,0], self.models[c_i][:,1], c = colors[c_i])
-        plt.show()
 
-class Model():
-    def __init__(self, list_of_points):
-        self.traj = copy.deepcopy(list_of_points)
+
 
 
 def countrows(file, numoftrajs=0):
@@ -932,7 +932,7 @@ CENTROIDS = trajs.generate_centroids(M, plotit=True, threshold=152000)#152000
 #generate_data(M,T, init_points, noise, Number_of_trajs)
 
 treashold = 20000
-covariance = 1700
+covariance = 1930
 GMM = GaussianMixtureModel(trajs,K,covariance,M,treashold)
 GMM.GMM()
 
