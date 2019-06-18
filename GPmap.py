@@ -296,20 +296,27 @@ class trajectories:
                 tx = np.array([self.pathdict[key].points[:,2] for key in value]).flatten().reshape(-1,1)
                 ty = tx
 
-                lengthscale = 1.0
-                noise = 1.0
-                n = 20
-                (constant_x, constant_y) = (2.0, 2.0)
+                lengthscale_x = 1.0
+                lengthscale_y = 1.0
+                
+                noise_x = 1.0
+                noise_y = 1.0
+                
+                n_x = 10
+                n_y = 10
+                
+                constant_x = 2.0 
+                constant_y = 2.0
 
                 theta_x,theta_y = (316.0,1.0)
 
-                kx = theta_x*gp.kernels.RBF(lengthscale,x_lengthscale_bounds) + gp.kernels.WhiteKernel(noise, x_noise_bounds) + constant_x
+                kx = theta_x*gp.kernels.RBF(lengthscale_x, x_lengthscale_bounds) + gp.kernels.WhiteKernel(noise_x, x_noise_bounds) + constant_x
                 print("x kernel before:", kx)
-                process_x = gp.GaussianProcessRegressor(kernel=kx, n_restarts_optimizer=n, normalize_y=False, alpha=0, copy_X_train=True)
+                process_x = gp.GaussianProcessRegressor(kernel=kx, n_restarts_optimizer=n_x, normalize_y=False, alpha=0, copy_X_train=True)
 
-                ky = theta_y*gp.kernels.RBF(lengthscale, y_lengthscale_bounds) + gp.kernels.WhiteKernel(noise, y_noise_bounds) + constant_y
+                ky = theta_y*gp.kernels.RBF(lengthscale_y, y_lengthscale_bounds) + gp.kernels.WhiteKernel(noise_y, y_noise_bounds) + constant_y
                 print("y kernel before:", ky)
-                process_y = gp.GaussianProcessRegressor(kernel=ky, n_restarts_optimizer=n, normalize_y=False, alpha=0, copy_X_train=True)
+                process_y = gp.GaussianProcessRegressor(kernel=ky, n_restarts_optimizer=n_y, normalize_y=False, alpha=0, copy_X_train=True)
 
                 process_x.fit(tx, xs)
 
@@ -329,6 +336,7 @@ class trajectories:
                     plt.figure()
                     plt.title("process y")
                     self.plotprocess(process_y, numofsamples, plotcov)
+                    plt.show()
                 self.gaussian_processes[cluster] = struct(process_x, process_y)
 
     def gaussian_process_prediction(self, clusters, observations = None, plotit=False):
@@ -479,13 +487,13 @@ class trajectories:
             predict_x,std_x = process_x.predict(seq_x, return_std=True)
             predict_y,std_y = process_y.predict(seq_y, return_std=True)
             #plt.scatter(seq_x, predict_x, c='m', zorder=len(xs)+1)
-            plt.fill_between(predict_x.flatten(), predict_y.flatten()-np.square(std_y).flatten(),
-                             predict_y.flatten()+np.square(std_y).flatten(), color='b', alpha=0.2)
+            #plt.fill_between(predict_x.flatten(), predict_y.flatten()-np.square(std_y).flatten(),
+            #                 predict_y.flatten()+np.square(std_y).flatten(), color='b', alpha=0.2)
 
 
             #plt.scatter(seq_y, predict_y, c='m', zorder=len(ys)+1)
-            plt.fill_between(predict_y.flatten(), predict_x.flatten()-np.square(std_x).flatten(),
-                             predict_x.flatten()+np.square(std_x).flatten(), color='yellow', alpha=0.2)
+            #plt.fill_between(predict_y.flatten(), predict_x.flatten()-np.square(std_x).flatten(),
+            #                 predict_x.flatten()+np.square(std_x).flatten(), color='yellow', alpha=0.2)
 
             plt.scatter(predict_x, predict_y, c='m', zorder=len(self.pathdict)+1, s=2)
             #plt.text(predict_x[-1], predict_y[-1], "x_score: " + str(process_x.log_marginal_likelihood()) +
@@ -615,8 +623,6 @@ class GaussianMixtureModel():
         for t_key in self.centroids:
             self.models.append(self.centroids[t_key].points)
 
-
-
         self.plot_models(True)
         
         
@@ -631,7 +637,7 @@ class GaussianMixtureModel():
                 plt.plot(self.trajs.pathdict[t_key].points[:,0],self.trajs.pathdict[t_key].points[:,1],color= colors[traj_color])
                 
         for c_i in range(self.M):
-            plt.scatter(self.models[c_i][:,0], self.models[c_i][:,1], alpha=0.5, marker=r'*',color=colors[c_i], zorder = 9999999)
+            plt.scatter(self.models[c_i][:,0], self.models[c_i][:,1], alpha=0.5, marker=r'*',color=colors[c_i], zorder = len(self.trajs.pathdict)+1)
             #plt.plot(self.models[c_i][:,0], self.models[c_i][:,1], c = colors[c_i])
         plt.show()     
 
@@ -679,10 +685,6 @@ class GaussianMixtureModel():
             res = c
         return res
 
-
-
-        #return max_diviation,num_of_changes
-
     def set_weights(self,bayesian_matrix):
         max_diviation = 0.0
         sum_ti_importance = sum(bayesian_matrix)
@@ -722,8 +724,6 @@ class GaussianMixtureModel():
                     new_weighted_prob = 0.0
                 traj.weighted_probability[m] = new_weighted_prob
 
-
-
         return max_diviation
 
     def normalize(self,bayesian_matrix):
@@ -761,10 +761,6 @@ class GaussianMixtureModel():
         #*****************************************************************#
         return max_div
     
-
-        
-   
-
     def GMM(self, max_div = 0.0):
         swap = True
         laps = 0
@@ -782,11 +778,6 @@ class GaussianMixtureModel():
                 self.plot()
         print("-DONE-")
         self.plot()
-
-
-
-
-
 
 def countrows(file, numoftrajs=0):
     """counts all rows of a csv file"""
@@ -898,16 +889,16 @@ T = n
 K = T #"Hyperparameter"
 M = 4 #number of clusters
 
-CENTROIDS = trajs.generate_centroids(M, plotit=True, threshold=152000)#152000
+CENTROIDS = trajs.generate_centroids(M, plotit=True, threshold=252000)#152000
 #odels_created = [traj for _, traj in CENTROIDS.items()]
 #init_points = [0, 455, 1050]
 #noise = 10
 #Number_of_trajs = 40
 #generate_data(M,T, init_points, noise, Number_of_trajs)
 
-#covariance = 1930
+covariance = 1930
 GMM = GaussianMixtureModel(trajs,K,covariance,M, CENTROIDS)
-#GMM.GMM()
+GMM.GMM()
 
 #K=11 #for 100 trajs
 #K=2 #for 10 trajs
@@ -915,11 +906,11 @@ GMM = GaussianMixtureModel(trajs,K,covariance,M, CENTROIDS)
 #26 for 50
 K=M
 
-#CLUSTERS = trajs.kmeansclustering(K, 16000, 5, True, centroids=CENTROIDS)[0]
+CLUSTERS = trajs.kmeansclustering(K, 16000, 5, True, centroids=CENTROIDS)[0]
 #CLUSTERS = trajs.kmeansclustering(K, 6500, 5, True)[0]
 #trajs.numofpoints = T
-#trajs.generate_guassian_processes(CLUSTERS, True, plotcov=True, x_noise_bounds=(1e-5, 1.0), y_noise_bounds=(1e-5, 10000.0),
-#                                  x_lengthscale_bounds=(1.0, 1e5), y_lengthscale_bounds=(1.0, 1e5))
+trajs.generate_guassian_processes(CLUSTERS, True, plotcov=True, x_noise_bounds=(1e-5, 10000.0), y_noise_bounds=(1e-5, 10000.0),
+                                  x_lengthscale_bounds=(10.0, 1e5), y_lengthscale_bounds=(10.0, 1e5))
 #trajs.gaussian_process_prediction(clusters=CLUSTERS)
-#trajs.plotproceses_in_xy_plane()
+trajs.plotproceses_in_xy_plane()
 
