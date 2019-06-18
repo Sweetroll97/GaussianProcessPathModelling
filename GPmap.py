@@ -1,6 +1,3 @@
-"""Docstring
-    blablabla
-"""
 import csv
 import math
 import random as rdm
@@ -592,14 +589,14 @@ class Model():
 
 class GaussianMixtureModel():
 
-    def __init__(self, trajs,K,covariance,M, CENTROIDS ,init_points = None,):
+    def __init__(self, trajs,K,covariance,M, init_model_keys ,init_points = None,):
         self.trajs = copy.deepcopy(trajs)
         self.T = len(self.trajs.pathdict[next(iter(self.trajs.pathdict.items()))[0]].points)
         self.M = M
         self.beta = self.T/K
         self.K = K
         self.covariance = covariance
-        self.centroids = CENTROIDS
+        self.init_model_keys = init_model_keys
         self.models = []
         self.set_models()
 
@@ -612,15 +609,15 @@ class GaussianMixtureModel():
                 self.trajs.pathdict[t_key].probability.append(0.0)
 
         diviates = [[155.0,230.0,0.0],[-125.0,-230.0,0.0],[-125.0,-230.0,0.0]]
-        for t_key in self.centroids:
-            self.models.append(self.centroids[t_key].points)
+        for t_key in self.init_model_keys:
+            self.models.append(self.init_model_keys[t_key].points)
 
 
 
         self.plot_models(True)
         
         
-    def plot_models(self, first_run = False):# xmin, xmax, ymin, ymaxset_centroids
+    def plot_models(self, first_run = False):
         colors = ["red", "green", "blue", "black", "orange", "darkgreen",
                   "darkblue", "gold", "brown", "yellow", "pink", "purple", "grey"]
         for t_key in self.trajs.pathdict:
@@ -905,9 +902,9 @@ CENTROIDS = trajs.generate_centroids(M, plotit=True, threshold=152000)#152000
 #Number_of_trajs = 40
 #generate_data(M,T, init_points, noise, Number_of_trajs)
 
-#covariance = 1930
+covariance = 1930
 GMM = GaussianMixtureModel(trajs,K,covariance,M, CENTROIDS)
-#GMM.GMM()
+GMM.GMM()
 
 #K=11 #for 100 trajs
 #K=2 #for 10 trajs
